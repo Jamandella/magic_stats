@@ -1,0 +1,27 @@
+$clr-primary-400: hsl(252, 67%, 57%);
+$clr-primary-800: hsl(252, 30%, 15%);
+$clr-accent-400: hsl(171, 87%, 50%);
+$clr-neutral-100: hsl(0, 100%, 100%);
+$clr-neutral-200: hsl(246, 12%, 75%);
+$clr-neutral-900: hsl(0, 0%, 0%);
+
+body {
+  color: $clr-neutral-200;
+  background: $clr-primary-800;
+  font-family: system-ui, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  color: $clr-neutral-100;
+  line-height: 1.1;
+}
+
+.container {
+  width: min(100% - 2rem, 60rem);
+  margin-inline: auto;
+}
+
+.accent-text {
+  color: $clr-accent-400;
+}
