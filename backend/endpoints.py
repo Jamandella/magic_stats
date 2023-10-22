@@ -12,9 +12,9 @@ from flask import Response
 from . import flask_app
 import os
 import psycopg2
-import backend.tokens
 from psycopg2.extensions import parse_dsn
 
+"""
 temp = os.environ['DATABASE_URL']
 db_environ = parse_dsn(temp)
 
@@ -28,12 +28,14 @@ def create_conn():
     )
     cursor = conn.cursor()
     return conn, cursor
+"""
 
 @flask_app.route('/api')
 @cross_origin()
 def Welcome():
     return "Welcome to the API!!!"
 
+"""
 @flask_app.route('/users/<int:googleid>', methods = ['GET'])
 @cross_origin()
 def Get_User(googleid:int):
@@ -105,3 +107,4 @@ def Put_User():#googleid:int, firstname:str, lastname:str, isadmin:str, accountc
 #    conn, cursor = create_conn()
 #    conn.close()
 #    return UserRowJson
+"""
