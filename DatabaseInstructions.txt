@@ -1,0 +1,10 @@
+Building the database:
+1. Put buildgamedata.py, statfunctions.py, and tablebuilding.py in the same directory.
+2. Download the 17lands premier draft game data for LTR. Save the CSV as "game_data_public.LTR.PremierDraft.csv" 
+in the same directory as "buildgamedata.py", or change the value of "address" in buildgamedata.py to that file's location.
+3. Run buildgamedata.py. If you want to reduce the sample size to save space and time, uncomment the date filtering line.
+(We will later want to do steps 2 and 3 for draft data too, but that is not currently in use and is even larger)
+4. Add a file dbpgstrings.py to the folder. It should have values of host, database, user, and password for the postgres database in the form "host=...  database=... user=.... password=...."
+5. Run tablebuilding.py. To build a local database run the function builddb(conn1). To build the postgres database run builddb(conn2).
+
+Definitions and descriptions of the content of each table can be found in tablebuilding.py
