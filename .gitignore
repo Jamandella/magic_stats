@@ -20,5 +20,5 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-#local files
+# Local files
 **/__pycache__
