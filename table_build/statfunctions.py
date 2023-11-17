@@ -1,13 +1,8 @@
 import pandas as pd
 import numpy as np
-import sqlalchemy as sqla
-from sqlalchemy import MetaData, Column, ForeignKey, Integer, String, Boolean, select, Insert, create_engine, func
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
-
+from sqlalchemy import MetaData, select, create_engine, func
+from sqlalchemy.orm import sessionmaker
 from math import sqrt
-class Base(DeclarativeBase):
-    pass
-#from sqlalchemy import select, func, MetaData,create_engine
 engine = create_engine("sqlite:///23spells.db", echo=False) #this will need to be something else for the web version
 conn = engine.connect()
 Session = sessionmaker(bind=engine)
@@ -150,7 +145,7 @@ def cardInfo(set="ltr"): #returns dict of card info for given set. -1 for lands 
             "Forest" : [-1, 'C', 'L', 'B'],
             "Forge Anew" : [3, 'W', 'E', 'R'],
             "Friendly Rivalry" : [2, 'RG', 'I', 'U'],
-            "Frodo Baggins" : [2, 'GW', 'C', 'U'],
+            "Frodo Baggins" : [2, 'WG', 'C', 'U'],
             "Frodo, Sauron's Bane" : [1, 'W', 'C', 'R'], #sort of WB but not actually
             "Galadhrim Bow" : [3, 'G', 'A', 'C'],
             "Galadhrim Guide" : [4, 'G', 'C', 'C'],
@@ -210,7 +205,7 @@ def cardInfo(set="ltr"): #returns dict of card info for given set. -1 for lands 
             "Lost to Legend" : [2, 'W','I','U'],
             "Lothlórien Lookout" : [2,'G','C','C'],
             "Lotho, Corrupt Shirriff" : [2,'WB','C','R'],
-            "Lórien Revealed" : [5,'U','S','C'], #land cycler
+            "Lórien Revealed" : [5,'U','Sy','C'], #land cycler
             "Many Partings" : [1,'G','S','C'],
             "March from the Black Gate" : [2,'B','E','U'],
             "Mauhúr, Uruk-hai Captain" : [2,'BR','C','U'],
@@ -300,7 +295,7 @@ def cardInfo(set="ltr"): #returns dict of card info for given set. -1 for lands 
             "Soothing of Sméagol" : [2,'U','I','C'],
             "Spiteful Banditry" : [2, 'R', 'E','M'],#x spell
             "Stalwarts of Osgiliath" : [5,'W','C','C'],
-            "Stern Scolding" : [1,'W','I','U'],
+            "Stern Scolding" : [1,'U','I','U'],
             "Stew the Coneys" : [3,'G','I','U'],
             "Sting, the Glinting Dagger" : [2,'C','A','R'],
             "Stone of Erech" : [1,'C','A','U'],
@@ -361,7 +356,7 @@ def getCardsWithMV(mv, set="ltr"): #returns a list of all card names from a give
 
 
 
-def getGameDataFrame(archLabel, minRank=0, maxRank=6): 
+def getGameDataFrame(archLabel, minRank=0, maxRank=6, setName='ltr'): 
     #returns the data gamedata rows of all games fitting the given criteria as a dataframe
     #trade off of using too much memory vs reading the raw data too many times which is slow
     game_data_table=metadata.tables['game_data']
@@ -372,6 +367,16 @@ def getGameDataFrame(archLabel, minRank=0, maxRank=6):
     df=pd.read_sql_query(q,conn)
 
     return df
+
+def getCardNames(setName='ltr'):
+    #game_data_table=metadata.tables[setName+'GameData']
+    game_data_table=metadata.tables['game_data'] #temporary
+    cols=game_data_table.c.keys()
+    cardNames=[]
+    for c in cols:
+        if c[:5]=="deck_":
+            cardNames.append(c[5:])
+    return cardNames
 
 def countCurve(gamesDF):
     #given a dataframe of games, returns total number of cards of each MV in those games
@@ -415,12 +420,12 @@ def getArchWinRate(archLabel, minRank=0, maxRank=6, set='ltr'):
 def getCardInDeckWinRate(cardID, archLabel='ALL', minCopies=1, maxCopies=40, minRank=0, maxRank=6, set='ltr'):
     cg_table=metadata.tables['ltrCardGameStats']
     arid_table=metadata.tables['ltrArchRank']
-    q1=sqla.select(func.sum(cg_table.c.game_count).label("wins")).join(arid_table, cg_table.c.arid==arid_table.c.id).where(
+    q1=select(func.sum(cg_table.c.game_count).label("wins")).join(arid_table, cg_table.c.arid==arid_table.c.id).where(
                                                                             cg_table.c.id==cardID, cg_table.c.won==True, 
                                                                             cg_table.c.copies>=minCopies,
                                                                             cg_table.c.copies<=maxCopies,
                                                                             arid_table.c.rank>=minRank,arid_table.c.rank<=maxRank)
-    q2=sqla.select(sqla.func.sum(cg_table.c.game_count).label("games")).join(arid_table, cg_table.c.arid==arid_table.c.id).where(
+    q2=select(func.sum(cg_table.c.game_count).label("games")).join(arid_table, cg_table.c.arid==arid_table.c.id).where(
                                                                             cg_table.c.id==cardID, arid_table.c.rank>=minRank,
                                                                             cg_table.c.copies>=minCopies,
                                                                             cg_table.c.copies<=maxCopies,
@@ -433,23 +438,19 @@ def getCardInDeckWinRate(cardID, archLabel='ALL', minCopies=1, maxCopies=40, min
     games=pd.read_sql_query(q2,conn).at[0,'games']
     if games==0: return 0
     else: return wins/games
-def getDFWinRate(df): #returns win rate of data frame with a game count and a win/loss column, i.e. subset of CGStats or ArcStats
+def winRateFromCounts(df): #returns win rate of data frame with a game count and a win/loss column, i.e. subset of CGStats or ArcStats
     games=df['game_count'].sum()
     wins=df[[df['won']==True]]['game_count'].sum()
     if games==0: return 0
     else: return wins/games
 
-def recordByTurn(df, card_name): #df should be dataframe of games with given card in the deck
-    deck_card="deck_"+card_name
-    drawn_card="drawn_"+card_name
-    dfw=df[df['won']==True]
 
 def meanGameLength(archLabel, minRank=0, maxRank=6, won=-1): 
     ag_table=metadata.tables['ltrArchGameStats']
     arid_table=metadata.tables['ltrArchRank']
     #use won=0 to only count losses, won=1 to only count wins, archLabel='any' to include all archetypes
-    q1=sqla.select(sqla.func.sum(ag_table.c.game_count).label('games'),
-        sqla.func.sum(ag_table.c.game_count * ag_table.c.turns).label('turns')).join(
+    q1=select(func.sum(ag_table.c.game_count).label('games'),
+        func.sum(ag_table.c.game_count * ag_table.c.turns).label('turns')).join(
                                         arid_table, ag_table.c.arid==arid_table.c.id).where(
                                         arid_table.c.rank>=minRank,
                                         arid_table.c.rank<=maxRank)
@@ -467,7 +468,7 @@ def gameLengthDistDB(archLabel, minRank=0, maxRank=6):
     #game lengths <=5 turns and >=14 turns are grouped together 
     ag_table=metadata.tables['ltrArchGameStats']
     arid_table=metadata.tables['ltrArchRank']
-    q=sqla.select(ag_table.c.turns,ag_table.c.game_count).join(arid_table, ag_table.c.arid==arid_table.c.id).where(arid_table.c.name==archLabel, 
+    q=select(ag_table.c.turns,ag_table.c.game_count).join(arid_table, ag_table.c.arid==arid_table.c.id).where(arid_table.c.name==archLabel, 
                                          arid_table.c.rank>=minRank, arid_table.c.rank<=maxRank)
     df=pd.read_sql_query(q,conn)
     counts=df[['turns','game_count']].groupby('turns').sum()
@@ -509,6 +510,7 @@ def gameLengthDistDF(df):
     else: return lens/total
     #could do this faster extracting from archstats for archetype game lengths
 
+
 def getRecordByLength(df):
     df=pd.DataFrame(df)
     gameCount=df.shape[0]
@@ -537,12 +539,6 @@ def getCardsWithEnoughGames(df, min_sample, prefix="deck_"):
             if df[df[col]>0].shape[0]>min_sample:
                 cards.append(col[len(prefix):])
     return cards
-
-def getAIWD(df, card_name):
-    #df should already be filtered to be the relevant archetype
-    card_table=metadata.tables['ltrCardInfo']
-    cardq=select(card_table.c.name).where(card_table.c.id==cardID)
-    card_name=pd.read_sql_query(cardq,conn).at[0,0]
     
     
 def winRate(df):
@@ -550,10 +546,6 @@ def winRate(df):
     if df.shape[0]==0: return 0
     else: return df[df['won']==True].shape[0]/df.shape[0]
 
-    
-
-
-#testing
 
 
 
