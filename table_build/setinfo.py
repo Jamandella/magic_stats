@@ -2,16 +2,25 @@ from bs4 import BeautifulSoup
 import requests
 import json
 import html
-import pandas
-import statfunctions as sf
+from sqlalchemy import MetaData, create_engine
+from sqlalchemy.orm import sessionmaker
+
+engine = create_engine("sqlite:///23spells.db", echo=False) #this will need to be something else for the web version
+conn = engine.connect()
+Session = sessionmaker(bind=engine)
+session = Session()
+metadata = MetaData()
+metadata.reflect(bind=engine)
 
 
 def get_parsed(url):
     req = requests.get(url)
     stuff = req.text
-    return BeautifulSoup(stuff)
+    return BeautifulSoup(stuff,features="html.parser")
 
-def extractCostInfo(cost:str):
+def extractCostInfo(cost:str): 
+    #Will need updates for sets with unusual mana symbols (e.g. hybrid/phyrexian)
+    #Card color is currently aligned with game rules meaning, but could opt for color identity instead by checking rules text
     symbols=cost.split('}')
     color_num=0
     mv=0
@@ -36,23 +45,32 @@ def extractCostInfo(cost:str):
 def getTypes(card_type):
     #Given the full type line (e.g. 'Artifact Creature - Golem'),
     #returns list of first letters of card types (['A','C'])
-    names=['Artifact','Creature','Enchantment','Land','Battle','Planeswalker','Instant','Sorcery']
+    type_names=['Enchantment','Artifact','Creature','Land','Battle','Planeswalker','Instant','Sorcery']
     typeWords=card_type.split()
-    typeLetters=[]
+    typeLetters=""
     for t in typeWords:
-        if t in names:
-            typeLetters.append(t[0])
+        if t in type_names:
+            typeLetters+=t[0]
     return typeLetters
+def getCardNames(setName='ltr'):
+    game_data_table=metadata.tables[setName+'GameData']
+    cols=game_data_table.c.keys()
+    cardNames=[]
+    for c in cols:
+        if c[:5]=="deck_":
+            cardNames.append(c[5:])
+    return cardNames
 
-
-def scrape_scryfall(abbr='ltr',maxID=400):
-    soup = get_parsed("https://scryfall.com/sets/"+abbr+"?as=checklist")
+def scrape_scryfall(set_abbr='ltr',maxID=400):
+    soup = get_parsed("https://scryfall.com/sets/"+set_abbr+"?as=checklist")
     table_start=soup.find("tbody")
     cards = table_start.findAll("tr")
     cardInfo={}
     setNum=0
     setNum=0
-    names=sf.getCardNames(abbr)
+    names=getCardNames(set_abbr)
+    allNames=names.copy()
+    unmatched={}
     while setNum<min(len(cards),maxID):
         card=cards[setNum]
         setNum+=1
@@ -62,26 +80,53 @@ def scrape_scryfall(abbr='ltr',maxID=400):
         card_type = fields[4].text.strip()
         rarity= fields[5].text.strip()
         types=getTypes(card_type)
-        mv,color=extractCostInfo(cost)
-        # card_text = html.unescape(card.find("div", class_="card-text-box").text.strip())
-        #stats = card.find("div", class_="card-text-stats")
+        mv,color=extractCostInfo(cost) 
+        if 'L' in types: mv=-1 #Separating lands out from 0 drops by setting their mana value as -1
         if title in names:
             names.remove(title)
             cardInfo[setNum]={
                 "name": title,
                 "mv": mv,
-                "color": color, 
+                "color": color, #stored as 5 bit int with each bit representing presence of a color
                 "type": types,
                 "rarity": rarity
-                # "card_text": card_text,
                 }
-
+        elif title not in allNames and setNum<=len(allNames):
+            unmatched[setNum]={
+                "name": title,
+                "mv": mv,
+                "color": color, #stored as 5 bit int with each bit representing presence of a color
+                "type": types,
+                "rarity": rarity
+                }
+            print("Card #", setNum, ":", title," has no initial match")
+    leftovers={}
+    for name in names:
+        alphaname=""
+        nameU=name.upper()
+        for i in range(len(nameU)):
+            if nameU[i].isalpha() and nameU[i].isascii():
+                alphaname+=nameU[i]
+        leftovers[alphaname]=name
+    for n in unmatched.keys():
+        alphaname=""
+        nameU=unmatched[n].get('name').upper()
+        for i in range(len(nameU)):
+            if nameU[i].isalpha() and nameU[i].isascii():
+                alphaname+=nameU[i]
+        if alphaname in leftovers.keys():
+            print("Secondary match found: ",leftovers[alphaname]," = ",unmatched[n]['name'])
+            cardInfo[n]=unmatched[n]
+            cardInfo[n]['name']=leftovers[alphaname]
+            leftovers.pop(alphaname)    
+    if len(leftovers)>0:
+        print("WARNING! No scryfall data found matching the following cards:")
+        print(leftovers)
     return cardInfo
-
-
-print(
-    json.dumps(
-        scrape_scryfall(abbr='bro'),
-        indent=4,
+def displaySet(set_abbr='dmu',maxID=400):
+    print(
+        json.dumps(
+            scrape_scryfall(set_abbr=set_abbr,maxID=maxID),
+            indent=4,
+        )
     )
-)

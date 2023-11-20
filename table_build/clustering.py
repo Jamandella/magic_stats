@@ -13,9 +13,10 @@ session = Session()
 metadata = MetaData()
 metadata.reflect(bind=engine)
 
-def getNonRandomDecks(maincolors='ALL',splash='ALL',size=1000, start=0,includeWins=False):
-    game_data_table=metadata.tables['game_data']
-    cards=statfunctions.cardInfo().keys()
+def getNonRandomDecks(set_abbr='ltr',maincolors='ALL',splash='ALL',size=1000, start=0,includeWins=False):
+    game_data_table=metadata.tables[set_abbr+'GameData']
+    card_info=statfunctions.cardInfo(set_abbr=set_abbr)
+    cards=card_info['name'].to_list()
     cols=[getattr(game_data_table.c,'deck_'+card) for card in cards]
     if includeWins:cols.append(game_data_table.c.won)
     s=select(*cols).limit(size).distinct(game_data_table.c.draft_id).where(game_data_table.c.index>=start)
@@ -25,9 +26,9 @@ def getNonRandomDecks(maincolors='ALL',splash='ALL',size=1000, start=0,includeWi
         s=s.where(game_data_table.c.splash_colors==splash)
     data=pd.read_sql_query(s,conn)
     return data
-def getRandomDecks(maincolors='ALL',splash='ALL',size=1000,includeWins=False):
+def getRandomDecks(set_abbr='ltr',maincolors='ALL',splash='ALL',size=1000,includeWins=False):
     #SQLA crashes when trying to select list of 32768+ indices
-    game_data_table=metadata.tables['game_data']
+    game_data_table=metadata.tables[set_abbr+'GameData']
     s=select(game_data_table.c.index).distinct(game_data_table.c.draft_id)
     if splash!='ALL': #splash="" for no splash
         s=s.where(game_data_table.c.splash_colors==splash)
@@ -39,7 +40,8 @@ def getRandomDecks(maincolors='ALL',splash='ALL',size=1000,includeWins=False):
         size=len(valid_inds)
     indices=random.sample(valid_inds,size)
     batches=size//30000+1
-    cards=statfunctions.cardInfo().keys()
+    card_info=statfunctions.cardInfo(set_abbr=set_abbr)
+    cards=card_info['name'].to_list()
     cols=[getattr(game_data_table.c,'deck_'+card) for card in cards]
     if includeWins: cols.append(game_data_table.c.won)
     s2=select(*cols).where(game_data_table.c.index.in_(indices[:30000]))
@@ -49,7 +51,7 @@ def getRandomDecks(maincolors='ALL',splash='ALL',size=1000,includeWins=False):
         data=pd.concat([data,pd.read_sql_query(s2,conn)],axis=0,ignore_index=True)
     print("Got {} games".format(data.shape[0]))
     return data
-def extendDeckData(decks: pd.DataFrame, cyclers_are_lands=False, statWeight=1, mvsmoothing=True, basics_are_stats=True):
+def extendDeckData(decks: pd.DataFrame, cyclers_are_lands=False, statWeight=1, mvsmoothing=True, basics_are_stats=True,set_abbr='ltr'):
     #.5 in each color rather than 1/#colors treats 3+ color cards weirdly, but I think it may be preferrable
     #A UB deck running the UBR Sauron has as much of a red card as one running the BR Balrog.
     #statWeight is to rescale the relative importance of the color split and mana curve vs the exact card list
@@ -58,10 +60,9 @@ def extendDeckData(decks: pd.DataFrame, cyclers_are_lands=False, statWeight=1, m
     #mvsmoothing is to make nearby mana values count as similar by splitting up an n cost card into .25(n-1)+.5n+.25(n+1).
     #This makes the switching a 1 cost card for a 2 (or 3) cost a smaller change than for a 5 cost.
     #Boundaries are split .75-.25.
-    card_table=metadata.tables['ltrCardInfo']
-    s=select(card_table.c.id,card_table.c.name,card_table.c.color,card_table.c.mana_value)
-    carddf=pd.read_sql_query(s,conn).set_index('id')
-    if cyclers_are_lands: #delete the existence of land cyclers and treat them as corresponding basics
+    carddf=statfunctions.cardInfo(set_abbr)
+    colors=['W','U','B','R','G']
+    if cyclers_are_lands and set_abbr=='ltr': #delete the existence of land cyclers and treat them as corresponding basics
         cyclers=['Eagles of the North','Lórien Revealed','Troll of Khazad-dûm','Oliphaunt','Generous Ent'] 
         ids=[41, 82, 133, 161, 249]
         cycle_cols=['deck_'+name for name in cyclers]
@@ -72,18 +73,22 @@ def extendDeckData(decks: pd.DataFrame, cyclers_are_lands=False, statWeight=1, m
         decks['deck_Forest']+=decks[cycle_cols[4]]
         decks.drop(labels=cycle_cols,axis=1,inplace=True)
         carddf.drop(labels=ids,axis=0,inplace=True)
-    colors=['W','U','B','R','G','C'] 
-    for c in colors:
-        colordf=carddf[carddf['color']==c]
-        if c=='C':
+    for c in range(-1,5):
+        if c==-1: #colorless case
+            colordf=carddf[carddf['color']==0]
             colordf=colordf[colordf['mana_value']>=0] #remove lands (listed as mana value -1)
-        cols=['deck_'+name for name in colordf['name']]
-        decks[c]=decks[cols].sum(axis=1)*statWeight
-        mcdf=carddf.query("color.str.match('.*"+c+".*')")[['name','color']] 
-        multicolor=mcdf[mcdf['color']!=c]['name'] #multicolor cards matching the given color
-        #I think
-        cols2=['deck_'+name for name in multicolor]
-        decks[c]+=.5*decks[cols2].sum(axis=1)*statWeight
+            cols=['deck_'+name for name in colordf['name']]
+            decks['C']=decks[cols].sum(axis=1)*statWeight
+        else:
+            cnum=2**c
+            colorplus=(carddf['color']//cnum)%2==1
+            colordf=carddf.loc[colorplus]
+            singlecolor=colordf[colordf['color']==cnum]['name'].to_list()
+            cols=['deck_'+name for name in singlecolor]
+            decks[colors[c]]=decks[cols].sum(axis=1)*statWeight
+            multicolor=colordf[colordf['color']!=cnum]['name'].to_list()
+            cols2=['deck_'+name for name in multicolor]
+            decks[colors[c]]+=.5*decks[cols2].sum(axis=1)*statWeight
     for mv in range(carddf['mana_value'].max()+1):
         decks[mv]=np.zeros(decks.shape[0])
     for mv in range(carddf['mana_value'].max()+1):
@@ -102,19 +107,19 @@ def extendDeckData(decks: pd.DataFrame, cyclers_are_lands=False, statWeight=1, m
         decks['stat_Forest']=decks['deck_Forest']*statWeight
     return decks
 
-def makeDeckList(zscores, cardCounts, zcutoff=0, qcutoff=0, show=10, incBasics=False):
+def makeDeckList(zscores, cardCounts, zcutoff=0, qcutoff=0, show=10, incBasics=False, set_abbr='ltr'):
     #cardCounts should be a list where cardCounts[i] is an amount of the card with cardInfo.id=i
-    card_table=metadata.tables['ltrCardInfo']
-    s=select(card_table.c.id,card_table.c.name,card_table.c.color)
-    basics=[172, 116, 230, 152, 70] #positions of plains island swamp mountain forest
+    carddf=statfunctions.cardInfo(set_abbr=set_abbr)
+    basic_names=['Plains','Island','Swamp','Mountain','Forest']
+    basics=[]
+    for b in basic_names:
+        basics.append(carddf.index[carddf['name']==b].tolist()[0]) 
     basicCounts=[round(cardCounts[i],2) for i in basics]
-    carddf=pd.read_sql_query(s,conn).set_index('id')
     deckList=pd.DataFrame({'name':[],'z-scores':[], 'quantity':[], 'color':[]})
     for i in range(carddf.shape[0]):
         if zscores[i]>zcutoff and cardCounts[i]>qcutoff and (incBasics or (i not in basics)):
-
             name=carddf.at[i,'name']
-            color=carddf.at[i,'color']
+            color=statfunctions.colorString(carddf.at[i,'color'])
             deckList.loc[len(deckList.index)]=[name,round(zscores[i],2),round(cardCounts[i],2),color]
     deckList=deckList.sort_values('z-scores',axis=0, ascending=False)
     print(deckList.iloc[:show,:])
@@ -139,8 +144,8 @@ def mbkmClusters(data, batch_size=4096, clusters=10,reassignment_ratio=.01):
     t_mini_batch = time.time() - t0
     print("Took {} to process".format(t_mini_batch))
     return mbk,wins
-def testMBKMeans(clusters=10,maincolors='ALL',size='20000'):
-    decks=getRandomDecks(maincolors=maincolors,size=size,includeWins=True)
+def testMBKMeans(set_abbr='ltr',clusters=10,maincolors='ALL',size='20000'):
+    decks=getRandomDecks(set_abbr=set_abbr,maincolors=maincolors,size=size,includeWins=True)
     print("Total wins:", decks.iloc[:,-1].sum())
     deckstats=decks.iloc[:,:-1].describe()
     mbk,wins=mbkmClusters(decks,clusters=clusters)
@@ -154,7 +159,7 @@ def testMBKMeans(clusters=10,maincolors='ALL',size='20000'):
         center=mbk.cluster_centers_[j]
         #makeDeckList(((clusters+1)*center-total)/clusters, cutoff=.4)
         z_scores=(center-deckstats.loc['mean'])/deckstats.loc['std']
-        makeDeckList(z_scores,center, qcutoff=0.1)
+        makeDeckList(z_scores,center, qcutoff=0.1,set_abbr=set_abbr)
         print("Win rate:",win_counts[j]/game_counts[j], "Game count:", game_counts[j])
 
 #testMBKMeans()
@@ -186,6 +191,7 @@ def checkMBKStability(decks1,decks2,clusters=20,verbose=True,nocyclers=False):
     #mode=anything else to just silently compute the l2 displacement between centers
     #note- l1 displacement doesn't mean much as they are getting matched based on l2 proximity
     #l2 displacement also isn't perfect as pairings aren't 1-1
+    #currently only ltr compatible
     CARDS=266
     if nocyclers: CARDS=261
     deckstats1=decks1.iloc[:,:CARDS].describe()
@@ -237,7 +243,8 @@ def checkMBKStability(decks1,decks2,clusters=20,verbose=True,nocyclers=False):
     
                 
 def epsilonScouting(size=10000,samplecount=10): #preliminary info for setting up DBSCAN parameters
-    #epsilon =5-6 looks reasonable
+    #epsilon =5-6 looks reasonable for undextended data
+    #for extended data, varies depending on statweight
     decks=extendDeckData(getRandomDecks(size=size),statWeight=2)
     print(decks.shape)
     inds=list(random.sample(range(size),samplecount))
@@ -352,16 +359,14 @@ def birchByColors(arcmin=1000,max_subclusters=8):
                     print("Cluster {} for {}:".format(i,mc))
                     print("Population:",vcounts[i])
                     makeDeckList(merged_center[i,:],merged_center[i,:],qcutoff=.3,show=12)
-            #print(brc.root_.__dict__)
             showTree(brc.root_)
-            subc=_birch._CFSubcluster()
+            
             
 
         else:
-            print('{} too small to split'.format(mc))    
-        
+            print('{} too small to split'.format(mc))        
+testMBKMeans(set_abbr='dmu',clusters=20,size=50000)
 
-birchByColors(arcmin=500)
 conn.close()
 #Better diagnostics needed
 #Question- what metrics SHOULD determine whether an archetype distinction is meaningful
