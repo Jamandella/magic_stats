@@ -1,8 +1,9 @@
 import pandas as pd
-from sqlalchemy import MetaData, ForeignKey, Integer, SmallInteger, String, Boolean,select, insert, create_engine, delete
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import MetaData, ForeignKey, Integer, SmallInteger, String, Boolean, DateTime
+from sqlalchemy import Column, Table, select, create_engine, delete
+from sqlalchemy.orm import mapped_column, DeclarativeBase
 from statfunctions import *
+from processdraftdata import *
 from setinfo import scrape_scryfall
 from dbpgstrings import host, database, user, password
 import time
@@ -49,6 +50,19 @@ class CardInfo(Base):
     # card type-A(rtifact), C(reature), E(nchantment), L(and), P(laneswalker), I(nstant), S(orcery), B(attle) 
     # multi-type cards are stored like 'AC' for 'Artifact Creature'.
     # Rarity- C(ommon), U(ncommon), R(are), M(ythic), B(asic land)
+class DraftInfo(Base):
+    __tablename__=set_abbr+'DraftInfo'
+    draft_id=mapped_column(String, primary_key=True)
+    draft_time=mapped_column(DateTime)
+    rank=mapped_column(SmallInteger)
+    wins=mapped_column(SmallInteger)
+    losses=mapped_column(SmallInteger)
+"""class Decklists(Base): 
+    __tablename__=set_abbr+'Decks'
+    draft_id=mapped_column(Integer, )
+    main_colors=mapped_column(String)
+    CARDNAME=mapped_column(Integer) #one of these for every card in given set 
+"""
 
 class ArchGameStats(Base):
     #For each archetype and rank and length of game (by turns), there is a row for wins and a row for losses
@@ -81,7 +95,8 @@ class ArchGameStats(Base):
     #game_count: number of games that match the previous 3 variables (e.g. number of times a WR diamond deck lost in 9 turns)
     #lands: total number of lands in deck in those games
     #nx_drops: total number of x drops in deck in those games (with n8p_drops meaning number of 8+ drops)
-    
+
+
 
 class CardGameStats(Base):
     #better structure id/arid/copies : wins/losses
@@ -109,7 +124,64 @@ class CardGameStats(Base):
     #more stuff here"""
 
 
+
 #Table Building
+def createDecklists(conn): 
+    tableName=set_abbr+'Decklists'
+    Base.metadata.reflect(bind=conn)
+    if tableName in Base.metadata.tables.keys():
+        oldtable=Base.metadata.tables[tableName]
+        oldtable.drop(bind=conn)
+        print("Dropped previous decklist table")
+        conn.commit()
+    carddf=cardInfo(set_abbr=set_abbr)
+    Base.metadata.reflect(bind=conn)
+    cols=[Column('deck_id',Integer, primary_key=True),
+          Column('draft_id',String,ForeignKey(set_abbr+'DraftInfo.draft_id')),
+          Column('main_colors',String),
+          Column('archetype', Integer)]
+    for name in carddf['name'].tolist():
+        cols.append(Column(name,SmallInteger))
+    decktable=Table(set_abbr+'Decklists', Base.metadata, *cols)
+    Base.metadata.create_all(bind=conn)
+    conn.commit()
+
+
+def populateDecklists(conn):
+    Base.metadata.reflect(bind=conn)
+    deck_table=Base.metadata.tables[set_abbr+"Decklists"]
+    t0=time.time()
+    d=deck_table.delete()
+    conn.execute(d)
+    conn.commit()
+    metadata.reflect(bind=conn1)
+    game_data_table=metadata.tables[set_abbr+'GameData']
+    s0=select(func.max(game_data_table.c.index))
+    size=pd.read_sql_query(s0,conn1).iloc[0,0]
+    print("Total rows:",size)
+    card_info=cardInfo(set_abbr=set_abbr)
+    cards=card_info['name'].to_list()
+    cols=[game_data_table.c.draft_id,game_data_table.c.main_colors]
+    cols.extend([getattr(game_data_table.c,'deck_'+card).label(card) for card in cards])
+    prevIndex=0
+    for k in range(size//200000+1):
+        s=select(*cols).distinct(game_data_table.c.draft_id)
+        t1=time.time()
+        s=s.where(game_data_table.c.index>=k*200000, game_data_table.c.index<min((k+1)*200000,size))
+        deckDF=pd.read_sql_query(s,conn1)
+        oldColOrder=deckDF.columns.to_list()
+        deckDF['deck_id']=deckDF.index+prevIndex
+        prevIndex=deckDF['deck_id'].max()+1
+        deckDF['archetype']=[-1]*deckDF.shape[0]
+        newColOrder=['deck_id','draft_id','main_colors','archetype']+oldColOrder[2:]
+        deckDF=deckDF[newColOrder]
+        print(deckDF.tail())
+        deckDF.to_sql(set_abbr+'Decklists',con=conn,index=False,if_exists='append')
+        print("Retrieved deck batch in",time.time()-t1)
+        conn.commit()
+    print("Built decklist table in ",time.time()-t0)
+
+
 
 def populateARID(conn):
     arcs=['W','U','B','R','G','WU','WB','WR','WG','UB','UR','UG','BR','BG','RG','WUB','WUR','WUG','WBR','WBG','WRG',
@@ -122,15 +194,43 @@ def populateARID(conn):
             df.loc[id]=(id, arc, arc_num, rank)
             id+=1
         arc_num+=1
-    df.to_sql(set_abbr+'ArchRank',conn, index=False, if_exists='append')
+    df.to_sql(set_abbr+'ArchRank',conn, index=False, if_exists='replace')
     conn.commit()
+
 
 def populateCardTable(conn):
     df=pd.DataFrame.from_dict(scrape_scryfall(set_abbr=set_abbr),orient='index')
     df.columns=['name','mana_value','color','card_type','rarity']
     df['id']=df.index
-    df.to_sql(set_abbr+'CardInfo',conn, if_exists='append',index=False)
+    df.sort_index(inplace=True)
+    df.to_sql(set_abbr+'CardInfo',conn, if_exists='replace',index=False)
     conn.commit()
+
+def populateDraftInfo(conn):
+    draft_table=Base.metadata.tables[set_abbr+'DraftInfo']
+    d=draft_table.delete()
+    conn.execute(d)
+    conn.commit()
+    chunksize=45*42*5
+    draftdf=pd.DataFrame({'draft_id':[],'draft_time':[], 'rank':[], 'event_match_wins':[],'event_match_losses':[]})
+    address=r".\draft_data_public."+set_abbr.upper()+".PremierDraft.csv"
+    print("Started reading draft csv")
+    progresscount=0
+    t0=time.time()
+    for chunk in pd.read_csv(address,chunksize=chunksize):
+        df = pd.DataFrame(chunk)
+        progresscount+=1
+        dfp1p1=df[df['pack_number']+df['pick_number']==0]
+        draftdf=pd.concat([draftdf,dfp1p1[['draft_id','draft_time','rank','event_match_wins','event_match_losses']]],axis=0)
+        if progresscount%50==0:
+             print("Processed {} lines in {} total seconds".format((progresscount*chunksize),round(time.time()-t0,3)))
+    shorter_names={'event_match_wins':'wins','event_match_losses':'losses'}
+    draftdf['rank']=draftdf['rank'].apply(lambda x: rankToNum(x))
+    draftdf.rename(columns=shorter_names,inplace=True)
+    draftdf.to_sql(set_abbr+'DraftInfo',con=conn,if_exists='append',index_label='draft_id',index=False)
+    conn.commit()
+    t2=time.time()
+    print("Built draft table in ",round(t2-t0,3))
 
 def populateArchGameTable(conn): 
     arID=Base.metadata.tables[set_abbr+'ArchRank']
@@ -171,10 +271,10 @@ def populateArchGameTable(conn):
 
 def populateCardGameTable(conn): #this takes a while (~20 mins on 1M game LTR data). worth looking for optimizations. 
     cg_table_name=set_abbr+'CardGameStats'
-    """cg_table=Base.metadata.tables[cg_table_name]
+    cg_table=Base.metadata.tables[cg_table_name]
     d=delete(cg_table)
     conn.execute(d)
-    conn.commit()"""
+    conn.commit()
     arID_table=Base.metadata.tables[set_abbr+'ArchRank']
     ranks=[None,'bronze','silver','gold','platinum','diamond','mythic'] 
     q1=select(arID_table)
@@ -350,6 +450,7 @@ def populateImpacts():
     return df #temporarily outputs a dataframe rather than building a table
 
 def buildDB(conn): #Only run this if you are building/rebuilding from the ground up 
+    Base.metadata.reflect(bind=conn)
     Base.metadata.drop_all(bind=conn)
     Base.metadata.create_all(bind=conn)
     conn.commit()
@@ -357,13 +458,23 @@ def buildDB(conn): #Only run this if you are building/rebuilding from the ground
     print("Built Archetype-Rank Table")
     populateCardTable(conn)
     print("Built Card Info Table")
+    makeDraftInfo(conn,set_abbr=set_abbr)
+    processPacks(conn,set_abbr=set_abbr)
     populateArchGameTable(conn)
     print("Built Archetype Game Stats Table")
     populateCardGameTable(conn)
     print("Built Card Game Stats Table")
+    createDecklists(conn)
+    populateDecklists(conn)
+    print("Built Decklists")
     print("Done")
     conn.commit()
-
+createDecklists(conn2)
+populateDecklists(conn2)
+Base.metadata.reflect(bind=conn2)
+decktable=Base.metadata.tables[set_abbr+'Decklists']
+s=select(decktable).limit(10)
+print(pd.read_sql_query(s,conn2))
 
 conn1.close()
 conn2.close()

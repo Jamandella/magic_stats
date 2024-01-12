@@ -3,12 +3,15 @@ import numpy as np
 from sqlalchemy import MetaData, select, create_engine, func
 from sqlalchemy.orm import sessionmaker
 from math import sqrt
-from dbpgstrings import host, database, user, password
+from dbpgstrings import host, database, user, password 
 port='5432'
+
+
+engine_loc = create_engine("sqlite:///23spells.db", echo=False) #Local db. Contains GameData table for getGameDataFrame.
+#Use first line to read stats from online db. Switch to second to run all locally
 engine=create_engine(url="postgresql://{0}:{1}@{2}:{3}/{4}".format(
             user, password, host, port, database))  
-
-#engine = create_engine("sqlite:///23spells.db", echo=False) #for local mode, comment out to work with postgres db
+#engine=engine_loc
 conn = engine.connect()
 Session = sessionmaker(bind=engine)
 session = Session()
@@ -78,6 +81,11 @@ def cardInfo(set_abbr='ltr'):
     df=pd.read_sql_query(s,conn,index_col='id')
     return df
 
+def listOfColors():
+    colors=['W','U','B','R','G','WU','WB','WR','WG','UB','UR','UG','BR','BG','RG','WUB','WUR','WUG','WBR','WBG','WRG',
+          'UBR','UBG','URG','BRG','WUBR','WUBG','WURG','WBRG','UBRG','WUBRG']
+    return colors
+
 def colorString(color:int):
     if color==0:
         return 'C'
@@ -89,7 +97,22 @@ def colorString(color:int):
         if (color//8)%2==1: s+='R'
         if (color//16)%2==1: s+='G'
         return s
-
+def rankToNum(name:str):
+    match name:
+        case 'bronze':
+            return 1
+        case 'silver':
+            return 2
+        case 'gold':
+            return 3
+        case 'platinum':
+            return 4
+        case 'diamond':
+            return 5
+        case 'mythic':
+            return 6
+        case _:
+            return 0
 def getCardsWithMV(mv, set_abbr="ltr"): #returns a list of all card names from a given set with a given mana value (mv)
     #all cards with 8+ mv get sorted into the same bucket
     card_table=metadata.tables[set_abbr+'CardInfo']
@@ -133,6 +156,7 @@ def getCardsWithColor(color, set_abbr='ltr',include_multicolor=True, include_lan
 def getGameDataFrame(archLabel, minRank=0, maxRank=6, set_abbr='ltr'): 
     #returns the data gamedata rows of all games fitting the given criteria as a dataframe
     #trade off of using too much memory vs reading the raw data too many times which is slow
+    metadata.reflect(bind=engine_loc)
     game_data_table=metadata.tables[set_abbr+'GameData']
     ranks=[None,'bronze','silver','gold','platinum','diamond','mythic']
     ranks=ranks[minRank:maxRank+1]
@@ -322,6 +346,3 @@ def winRate(df):
     #df should be a game dataframe
     if df.shape[0]==0: return 0
     else: return df[df['won']==True].shape[0]/df.shape[0]
-
-print(cardInfo())
-print(getCardInDeckWinRates(minCopies=0).sort_values('id',axis=0))
