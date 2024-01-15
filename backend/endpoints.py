@@ -14,7 +14,6 @@ import os
 import psycopg2
 from psycopg2.extensions import parse_dsn
 
-"""
 temp = os.environ['DATABASE_URL']
 db_environ = parse_dsn(temp)
 
@@ -28,7 +27,6 @@ def create_conn():
     )
     cursor = conn.cursor()
     return conn, cursor
-"""
 
 @flask_app.route('/api')
 @cross_origin()
@@ -57,20 +55,22 @@ def Put_User():#googleid:int, firstname:str, lastname:str, isadmin:str, accountc
     cursor.execute()
     conn.close()
     return {}
-
+"""
 #@flask_app.route(, methods = ['GET'])
 #@cross_origin()
 #def Get_RSVP(googleid:int):
 #    conn, cursor = create_conn()
 #    return UserRowJson
 
-#@flask_app.route('/rsvp', methods = ['PUT'])
-#@cross_origin()
-#def Put_RSVP():
-#    conn, cursor = create_conn()
-#    conn.commit()
-#    conn.close()
-#    return {}
+@flask_app.route('/MTGsets', methods = ['GET']) #get a complete list of the MTG sets that are draftable and their 3 letter codes in a json
+@cross_origin()
+def Get_MTGsets():
+    conn, cursor = create_conn() #set the cursor to the database
+    cursor.execute("SELECT * FROM mtgSets") #select all the MTS sets in Full set name, 3 letter code as the columns
+    MTGsets = cursor.fetchall() #set them equal to a local variable
+    conn.commit()
+    conn.close()
+    return {MTGsets} #return the json
 
 #@flask_app.route('/statuses', methods = ['GET'])
 #@cross_origin()
