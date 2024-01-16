@@ -84,7 +84,7 @@ Before you begin, ensure you have installed the following on your computer:
 **4. Run the project:**
 
   ```bash
-  pyton3 app.py
+  python3 app.py
   ```
 
 **Note:** You do not need to run `npm install`. This repository already contains the node modules required for the frontend. While this is unusual, this is because (reasons here). For more details refer to the [project structure](#project-structure) section of this document below.

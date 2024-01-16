@@ -1,0 +1,7 @@
+@use '../abstracts' as *;
+
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $size-16;
+}
