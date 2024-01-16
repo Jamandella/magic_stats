@@ -22,3 +22,4 @@ lerna-debug.log*
 
 # Local files
 **/__pycache__
+**/.env

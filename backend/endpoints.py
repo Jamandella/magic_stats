@@ -68,7 +68,6 @@ def Get_MTGsets():
     conn, cursor = create_conn() #set the cursor to the database
     cursor.execute("SELECT * FROM mtgSets") #select all the MTS sets in Full set name, 3 letter code as the columns
     MTGsets = cursor.fetchall() #set them equal to a local variable
-    conn.commit()
     conn.close()
     return {MTGsets} #return the json
 
@@ -107,4 +106,4 @@ def Get_MTGsets():
 #    conn, cursor = create_conn()
 #    conn.close()
 #    return UserRowJson
-"""
+#"""
