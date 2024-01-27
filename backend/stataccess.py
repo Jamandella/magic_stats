@@ -48,57 +48,49 @@ def getCardsWithColor(color, set_abbr='ltr',include_multicolor=True, include_lan
         cards=carddf.loc[colorfilter].index.to_list()
     return cards
 
-def getArchAvgCurve(archLabel, minRank=0, maxRank=6, set_abbr='ltr'):
+def getArchAvgCurve(archLabel, set_abbr='ltr'):
     #returns mean values of lands and each n drop for given archetype
     #Currently, archLabel is just colors in string form, e.g. 'G', or 'UB'. All colors are listed in WUBRG order.
     conn = engine.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine)
     archStats_table=metadata.tables[set_abbr+'ArchGameStats']
-    arid_table=metadata.tables[set_abbr+'ArchRank']
-    #Query all rows of the ArchGameStats table corresponding to given deck and ranks
-    q=select(archStats_table).join(arid_table, archStats_table.c.arid==arid_table.c.id).where(arid_table.c.name==archLabel, 
-                                         arid_table.c.rank>=minRank, arid_table.c.rank<=maxRank)
+    arch_table=metadata.tables[set_abbr+'Archetypes']
+    #Query all rows of the ArchGameStats table corresponding to given deck
+    q=select(archStats_table).join(arch_table, archStats_table.c.arch_id==arch_table.c.id).where(arch_table.c.archLabel==archLabel)
     df=pd.read_sql_query(q,conn) 
     #Remove first 3 columns from that table, leaving only game count and number of cards per mana value. Add up all the columns.
     dfTotal=df.iloc[0:,3:].sum() 
     conn.close()
-    if dfTotal['game_count']!=0:
+    if dfTotal['game_count']!=0: #Avoiding divide by 0.
         n=dfTotal['game_count']
         avgs=dfTotal.iloc[1:]/n
         return avgs.to_json()
-    else: #Should be all 0's in this case
+    else: #Should be all 0's in this case.
         return dfTotal.iloc[1:].to_json()
-def getArchWinRate(main_colors, minRank=0, maxRank=6, set_abbr='ltr'):
-    #returns a a given deck's win rate.
+def getArchBasics(archLabel,set_abbr='ltr'):
+    #returns a a given deck's total wins, losses, and drafts. wins/(wins+losses) for deck's overall win rate. 
+    #wins/drafts and losses/drafts for deck's average record.
     conn = engine.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine)
-    archStats_table=metadata.tables[set_abbr+'ArchGameStats']
-    arid_table=metadata.tables[set_abbr+'ArchRank']
-    q1=select(func.sum(archStats_table.c.game_count).label('games')).join(arid_table,archStats_table.c.arid==arid_table.c.id).where(arid_table.c.name==main_colors,
-                                                                                    arid_table.c.rank>=minRank,
-                                                                                    arid_table.c.rank<=maxRank)                                                                                 
-    games_played=pd.read_sql_query(q1,conn).at[0,'games']
-    q1=q1.where(archStats_table.c.won==True)
-    wins=pd.read_sql_query(q1,conn).at[0,'games']
-    conn.close()
-    if games_played==0: return 0
-    else: return wins/games_played
-def getCardInDeckWinRates(archLabel='ALL', minCopies=1, maxCopies=40, minRank=0, maxRank=6, set_abbr='ltr', as_json=True): 
+    arch_table=metadata.tables[set_abbr+'Archetypes']
+    q1=select(arch_table.c.num_drafts,arch_table.c.num_wins,arch_table.c.numlosses).where(arch_table.c.archLabel==archLabel)                                                                             
+    df=pd.read_sql_query(q1,conn)
+    return df.to_json()
+def getCardInDeckWinRates(archLabel='ALL', minCopies=1, maxCopies=40, set_abbr='ltr', as_json=True): 
 #Returns game played win rates for all cards, indexed by their numerical id from CardInfo table. Can be restricted to specific decks and ranks.
 #Can also require a specific range of copies of each card.
     conn = engine.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine)
     cg_table=metadata.tables[set_abbr+'CardGameStats']
-    arid_table=metadata.tables[set_abbr +'ArchRank']
-    q=select(cg_table.c.id,func.sum(cg_table.c.win_count).label("wins"),func.sum(cg_table.c.game_count).label("games_played")).join(arid_table, cg_table.c.arid==arid_table.c.id).where(
+    arch_table=metadata.tables[set_abbr +'Archetypes']
+    q=select(cg_table.c.id,func.sum(cg_table.c.win_count).label("wins"),func.sum(cg_table.c.game_count).label("games_played")).join(arch_table, cg_table.c.arch_id==arch_table.c.id).where(
                                                                             cg_table.c.copies>=minCopies,
-                                                                            cg_table.c.copies<=maxCopies,
-                                                                            arid_table.c.rank>=minRank,arid_table.c.rank<=maxRank).group_by(cg_table.c.id)
+                                                                            cg_table.c.copies<=maxCopies).group_by(cg_table.c.id)
     if archLabel!='ALL':
-        q=q.where(arid_table.c.name==archLabel)
+        q=q.where(arch_table.c.archLabel==archLabel)
     df=pd.read_sql_query(q,conn)
     conn.close()
     tempgames=df['games_played'].mask(df['games_played']==0,1) #Used so that 0wins/0games->0%
@@ -106,7 +98,7 @@ def getCardInDeckWinRates(archLabel='ALL', minCopies=1, maxCopies=40, minRank=0,
     if as_json: return df.to_json()
     else: return df
 
-def getRecordByLength(archLabel:str,set_abbr='ltr', minRank=0,maxRank=6):
+def getRecordByLength(archLabel:str,set_abbr='ltr'):
     #Returns number of wins and losses at each game length for given deck
     #Shows how long the games tend to be and how the deck does as the game gets longer
     #"'(8,False)':9303" means that the deck lost 9303 games that lasted exactly 8 turns
@@ -114,17 +106,18 @@ def getRecordByLength(archLabel:str,set_abbr='ltr', minRank=0,maxRank=6):
     metadata = MetaData()
     metadata.reflect(bind=engine)
     archStats_table=metadata.tables[set_abbr+'ArchGameStats']
-    arid_table=metadata.tables[set_abbr+'ArchRank']
-    q1=select(archStats_table.c.turns,archStats_table.c.won,func.sum(archStats_table.c.game_count).label('games')).group_by(archStats_table.c.turns,archStats_table.c.won).join(arid_table,archStats_table.c.arid==arid_table.c.id).where(arid_table.c.name==archLabel,
-                                                                                    arid_table.c.rank>=minRank,
-                                                                                    arid_table.c.rank<=maxRank).order_by(archStats_table.c.turns,archStats_table.c.won)   
+    arch_table=metadata.tables[set_abbr+'Archetypes']
+    q1=select(archStats_table.c.turns,archStats_table.c.won,func.sum(archStats_table.c.game_count).label('games')).group_by(
+        archStats_table.c.turns,archStats_table.c.won).join(
+        arch_table,archStats_table.c.arch_id==arch_table.c.id).where(arch_table.c.archLabel==archLabel
+    ).order_by(archStats_table.c.turns,archStats_table.c.won)   
     df=pd.read_sql_query(q1,conn) 
     df.set_index(['turns','won'],inplace=True)
     conn.close()
     return df.to_json()
 
 def getMetaDistribution(set_abbr='ltr', minRank=0,maxRank=6):
-    #Gets number of drafts for each set of main colors
+    #Gets number of drafts for each set of main colors. Can be filtered by rank to show the metagame at user's level.
     conn = engine.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine)
@@ -137,7 +130,7 @@ def getMetaDistribution(set_abbr='ltr', minRank=0,maxRank=6):
     conn.close()
     return df.to_json()
 
-def getCardRecordByCopies(card_name:str, main_colors='ALL', set_abbr='ltr',minRank=0,maxRank=6):
+def getCardRecordByCopies(card_name:str, main_colors='ALL', set_abbr='ltr'):
     #Gets number of wins, games played, and win rate for a given card split up by number of copies of that card in the deck
     #For example "4":{"wins":859.0,"games":1414.0,"win_rate":0.6074964639}
     conn = engine.connect()
@@ -145,11 +138,10 @@ def getCardRecordByCopies(card_name:str, main_colors='ALL', set_abbr='ltr',minRa
     metadata.reflect(bind=engine)
     cg_table=metadata.tables[set_abbr+'CardGameStats']
     card_table=metadata.tables[set_abbr+'CardInfo']
-    arid_table=metadata.tables[set_abbr+'ArchRank']
+    arch_table=metadata.tables[set_abbr+'Archetypes']
     s=select(cg_table.c.copies,func.sum(cg_table.c.win_count),func.sum(cg_table.c.game_count)).group_by(cg_table.c.copies).join(
-        card_table,cg_table.c.id==card_table.c.id).where(card_table.c.name==card_name).join(
-            arid_table,cg_table.c.arid==arid_table.c.id).where(arid_table.c.rank>=minRank,arid_table.c.rank<=maxRank)
-    if main_colors!='ALL': s=s.where(arid_table.c.main_colors==main_colors)
+        card_table,cg_table.c.id==card_table.c.id).where(card_table.c.name==card_name)
+    if main_colors!='ALL': s=s.join(arch_table,cg_table.c.arch_id==arch_table.c.id).where(arch_table.c.archLabel==main_colors)
     df=pd.read_sql_query(s,conn)
     df.set_index(['copies'],inplace=True)
     df.columns=['wins','games']
