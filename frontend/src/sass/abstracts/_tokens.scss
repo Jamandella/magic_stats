@@ -3,12 +3,12 @@
 @use "sizes" as *;
 @use "typography" as *;
 
-$active-theme: $light;
+$active-theme: $dark;
 $enable-media-query-dark-mode: false;
 
 // contextual
-$color-text-default: $color-neutral-700;
-$color-background-default: $color-primary-100;
+$color-text-default: $color-neutral-800;
+$color-background-default: $color-neutral-200;
 $color-text-interactive-default: $color-accent-400;
 $color-text-interactive-hover: $color-accent-500;
 
@@ -59,7 +59,7 @@ $heading-color-default: $color-neutral-900;
 $heading-font-weight: $font-weight-bold;
 $heading-letter-spacing: $letter-spacing-loose;
 $heading-line-height: 1.1;
-$heading-text-transform: uppercase;
+$heading-text-transform: none;
 
 $heading-1-font-size: $font-size-900;
 $heading-1-color: $heading-color-default;
@@ -69,23 +69,23 @@ $heading-3-font-size: $font-size-700;
 $heading-3-color: $heading-color-default;
 
 // layout
-$grid-gap: $size-24;
+$grid-gap: $fluid-size-m;
 $flex-group-gap: $size-16;
 
 $hero-padding-block: clamp(15rem, 15vh, 20rem);
-$section-padding-block: clamp(5rem, 10vh, 6rem);
+$section-padding-block: $fluid-size-2xl;
 
-$container-min-margin-inline: $size-16;
-$container-max-width: 64rem;
+$container-min-margin-inline: $fluid-size-m;
+$container-max-width: 68rem;
 $container-max-width-narrow: 40rem;
 $container-max-width-wide: 75rem;
 
 // site header
-$site-header-background-color: $color-primary-300;
+$site-header-background-color: $color-neutral-300;
 $site-header-color: $color-neutral-900;
-$site-header-padding: $size-32 0;
+$site-header-padding: $fluid-size-s 0;
 $site-header-margin: 0;
-$site-header-jusitifcation-small-screens: center;
+$site-header-jusitifcation-small-screens: space-between;
 $site-header-jusitifcation-large-screens: space-between;
 $site-header-alignment: center;
 
@@ -93,10 +93,11 @@ $site-header-alignment: center;
 $navigation-color: $site-header-color;
 $navigation-color-hover: $color-primary-300;
 $navigation-font-size: $font-size-400;
-$navigation-gap: $size-32;
+$navigation-gap: $fluid-size-m;
 $navigation-link-text-decoration: none;
 $navigation-font-family: $body-font-family;
-$navigation-font-weight: $body-font-weight;
+$navigation-font-weight: $font-weight-semi-bold;
+$navigation-text-transform: uppercase;
 
 // site footer
 $footer-background-color: $color-primary-300;
@@ -111,17 +112,19 @@ $button-font-size: $font-size-400;
 $button-font-weight: $font-weight-bold;
 $button-text-transform: uppercase;
 $button-padding: 0.75em 2em;
-$button-border: 0;
+$button-border: 3px solid;
 $button-border-radius: $border-radius-1;
+$button-background-color: transparent;
 
-$button-accent-color: $color-neutral-100;
+$button-accent-color: $color-accent-400;
 $button-accent-background: $color-accent-400;
-$button-accent-color-hover: $color-neutral-100;
-$button-accent-background-hover: $color-accent-500;
-$button-primary-color: $color-neutral-100;
-$button-primary-background: $color-primary-700;
-$button-primary-color-hover: $color-neutral-100;
-$button-primary-background-hover: $color-primary-800;
+$button-accent-color-hover: $color-neutral-200;
+$button-accent-background-hover: $color-accent-400;
+
+$button-primary-color: $color-primary-400;
+$button-primary-background: $color-primary-400;
+$button-primary-color-hover: $color-neutral-200;
+$button-primary-background-hover: $color-primary-400;
 
 // cards
 $card-flow-spacing: $size-8;

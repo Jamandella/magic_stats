@@ -13,10 +13,12 @@
   padding: $button-padding;
   border: $button-border;
   border-radius: $button-border-radius;
-  transition: 275ms ease;
+  transition: 250ms ease;
+  background-color: $button-background-color;
+
 
   &[data-type="accent"] {
-    background-color: $button-accent-background;
+    border-color: $button-accent-color;
     color: $button-accent-color;
 
     &:is(:hover, :focus) {
@@ -26,7 +28,7 @@
   }
 
   &[data-type="primary"] {
-    background-color: $button-primary-background;
+    border-color: $button-primary-color;
     color: $button-primary-color;
 
     &:is(:hover, :focus) {

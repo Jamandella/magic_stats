@@ -1,11 +1,12 @@
 @use "sass:map";
 @use "colors" as *;
 @use "sizes" as *;
+@use "tokens" as *;
 @use "typography" as *;
 
 @function clr($color, $shade) {
-  @if map.has-key($colors, $color, $shade) {
-    @return map.get($colors, $color, $shade);
+  @if map.has-key($active-theme, $color, $shade) {
+    @return map.get($active-theme, $color, $shade);
   } @else {
     @error '$colors does not have that color!';
   }

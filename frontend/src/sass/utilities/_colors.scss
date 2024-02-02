@@ -1,6 +1,6 @@
 @use "../abstracts/" as *;
 
-// $active-theme is $light by default in _tokens.scss
+// $active-theme is $dark by default in _tokens.scss
 @each $color, $shade-map in $active-theme {
   @each $shade, $value in $shade-map {
     .clr-#{$color}-#{$shade} {
