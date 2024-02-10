@@ -1,0 +1,59 @@
+/* @link https://utopia.fyi/space/calculator?c=340,16,1.2,1240,20,1.25,5,2,&s=0.75|0.5|0.25,1.5|2|3|4|6,s-l&g=s,l,xl,12 */
+$fluid-sizes: (
+  // Space 3xs: 4px → 5px 
+  '3xs': clamp(0.25rem, calc(0.23rem + 0.11vw), 0.31rem),
+  // Space 2xs: 8px → 10px 
+  '2xs': clamp(0.50rem, calc(0.45rem + 0.22vw), 0.63rem),
+  // Space xs: 12px → 15px 
+  'xs': clamp(0.75rem, calc(0.68rem + 0.33vw), 0.94rem),
+  // Space s: 16px → 20px 
+  's': clamp(1.00rem, calc(0.91rem + 0.44vw), 1.25rem),
+  // Space m: 24px → 30px 
+  'm': clamp(1.50rem, calc(1.36rem + 0.67vw), 1.88rem),
+  // Space l: 32px → 40px 
+  'l': clamp(2.00rem, calc(1.81rem + 0.89vw), 2.50rem),
+  // Space xl: 48px → 60px 
+  'xl': clamp(3.00rem, calc(2.72rem + 1.33vw), 3.75rem),
+  // Space 2xl: 64px → 80px 
+  '2xl': clamp(4.00rem, calc(3.62rem + 1.78vw), 5.00rem),
+  // Space 3xl: 96px → 120px 
+  '3xl': clamp(6.00rem, calc(5.43rem + 2.67vw), 7.50rem),
+
+  /* One-up pairs */
+  // Space 3xs-2xs: 4px → 10px 
+  '3xs-2xs': clamp(0.25rem, calc(0.11rem + 0.67vw), 0.63rem),
+  // Space 2xs-xs: 8px → 15px 
+  '2xs-xs': clamp(0.50rem, calc(0.33rem + 0.78vw), 0.94rem),
+  // Space xs-s: 12px → 20px 
+  'xs-s': clamp(0.75rem, calc(0.56rem + 0.89vw), 1.25rem),
+  // Space s-m: 16px → 30px 
+  's-m': clamp(1.00rem, calc(0.67rem + 1.56vw), 1.88rem),
+  // Space m-l: 24px → 40px 
+  'm-l': clamp(1.50rem, calc(1.12rem + 1.78vw), 2.50rem),
+  // Space l-xl: 32px → 60px 
+  'l-xl': clamp(2.00rem, calc(1.34rem + 3.11vw), 3.75rem),
+  // Space xl-2xl: 48px → 80px 
+  'xl-2xl': clamp(3.00rem, calc(2.24rem + 3.56vw), 5.00rem),
+  // Space 2xl-3xl: 64px → 120px 
+  '2xl-3xl': clamp(4.00rem, calc(2.68rem + 6.22vw), 7.50rem),
+);
+
+$fluid-size-3xs: clamp(0.25rem, calc(0.23rem + 0.11vw), 0.31rem);
+$fluid-size-2xs: clamp(0.50rem, calc(0.45rem + 0.22vw), 0.63rem);
+$fluid-size-xs: clamp(0.75rem, calc(0.68rem + 0.33vw), 0.94rem);
+$fluid-size-s: clamp(1.00rem, calc(0.91rem + 0.44vw), 1.25rem);
+$fluid-size-m: clamp(1.50rem, calc(1.36rem + 0.67vw), 1.88rem);
+$fluid-size-l: clamp(2.00rem, calc(1.81rem + 0.89vw), 2.50rem);
+$fluid-size-xl: clamp(3.00rem, calc(2.72rem + 1.33vw), 3.75rem);
+$fluid-size-2xl: clamp(4.00rem, calc(3.62rem + 1.78vw), 5.00rem);
+$fluid-size-3xl: clamp(6.00rem, calc(5.43rem + 2.67vw), 7.50rem);
+
+// One-up pairs
+$fluid-size-3xs-2xs: clamp(0.25rem, calc(0.11rem + 0.67vw), 0.63rem);
+$fluid-size-2xs-xs: clamp(0.50rem, calc(0.33rem + 0.78vw), 0.94rem);
+$fluid-size-xs-s: clamp(0.75rem, calc(0.56rem + 0.89vw), 1.25rem);
+$fluid-size-s-m: clamp(1.00rem, calc(0.67rem + 1.56vw), 1.88rem);
+$fluid-size-m-l: clamp(1.50rem, calc(1.12rem + 1.78vw), 2.50rem); 
+$fluid-size-l-xl: clamp(2.00rem, calc(1.34rem + 3.11vw), 3.75rem);
+$fluid-size-xl-2xl: clamp(3.00rem, calc(2.24rem + 3.56vw), 5.00rem);
+$fluid-size-2xl-3xl: clamp(4.00rem, calc(2.68rem + 6.22vw), 7.50rem);

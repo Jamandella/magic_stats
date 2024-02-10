@@ -1,0 +1,25 @@
+@use "../abstracts" as *;
+
+:root {
+  // $active-theme is $dark by default in _tokens.scss
+  @each $color, $shade-map in $active-theme {
+    @each $shade, $value in $shade-map {
+      --#{$color}-#{$shade}: #{$value};
+    }
+  }
+
+  // this is set to false by default in _tokens.scss
+  @if ($enable-media-query-dark-mode) {
+    @media (prefers-color-scheme: dark) {
+      @each $color, $shade-map in $dark {
+        @each $shade, $value in $shade-map {
+          --#{$color}-#{$shade}: #{$value};
+        }
+      }
+    }
+  }
+
+  @each $size-name, $size-value in $font-sizes {
+    --fs-#{$size-name}: #{$size-value};
+  }
+}

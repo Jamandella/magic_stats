@@ -1,0 +1,24 @@
+@use '../abstracts/' as *;
+
+.set-card {
+  border: 3px solid $color-neutral-900;
+  border-radius: $border-radius-2;
+  overflow: clip;
+  position: relative;
+  cursor: pointer;
+  transition: 250ms ease;
+
+  &__title {
+    position: absolute;
+    bottom: 0;
+    background: rgba(clr("neutral", "100"), 0.8) ;
+    width: 100%;
+    padding: 0.5em 1em;
+  }
+
+  &:is(:hover, :focus){
+    border-color: $color-primary-500;
+    color: $color-primary-500;
+    transform: scale(1.03);
+  }
+}
