@@ -9,14 +9,14 @@ port='5432'
 
 engine_loc = create_engine("sqlite:///23spells.db", echo=False) #Local db. Contains GameData table for getGameDataFrame.
 #Use first line to read stats from online db. Switch to second to run all locally
-engine=create_engine(url="postgresql://{0}:{1}@{2}:{3}/{4}".format(
+"""engine=create_engine(url="postgresql://{0}:{1}@{2}:{3}/{4}".format(
             user, password, host, port, database))  
-#engine=engine_loc
+engine=engine_loc
 conn = engine.connect()
 Session = sessionmaker(bind=engine)
 session = Session()
 metadata = MetaData()
-metadata.reflect(bind=engine)
+metadata.reflect(bind=engine)"""
 MINTURNS=5
 MAXTURNS=15
 MAXMV=8
@@ -75,18 +75,25 @@ def cardsSeenPercentiles(distributionDF): #not yet in use, may still be useful l
 
 
 
-def cardInfo(set_abbr='ltr'):
+def cardInfo(conn, set_abbr='ltr'):
+    metadata=MetaData()
+    metadata.reflect(bind=conn)
     card_table=metadata.tables[set_abbr+'CardInfo']
     s=select(card_table)
     df=pd.read_sql_query(s,conn,index_col='id')
     return df
 
-def listOfColors():
-    colors=['W','U','B','R','G','WU','WB','WR','WG','UB','UR','UG','BR','BG','RG','WUB','WUR','WUG','WBR','WBG','WRG',
+def listOfColors(order='binary'):
+    if order=='binary':
+        return ['W','U','WU','B','WB','UB','WUB','R','WR','UR','WUR','BR','WBR','UBR','WUBR','G',
+          'WG','UG','WUG','BG','WBG','UBG','WUBG','RG','WRG','URG','WURG','BRG','WBRG','UBRG','WUBRG']
+    else: return ['W','U','B','R','G','WU','WB','WR','WG','UB','UR','UG','BR','BG','RG','WUB','WUR','WUG','WBR','WBG','WRG',
           'UBR','UBG','URG','BRG','WUBR','WUBG','WURG','WBRG','UBRG','WUBRG']
-    return colors
+    
 
 def colorString(color:int):
+    #Color in card info is stored as a 5 bit int where each bit is the presence of a color. 
+    #This function turns that int into the corresponding WUBRG string.
     if color==0:
         return 'C'
     else:
@@ -97,6 +104,30 @@ def colorString(color:int):
         if (color//8)%2==1: s+='R'
         if (color//16)%2==1: s+='G'
         return s
+def colorInt(colorString):
+    #Inverse of colorString on appropriate WUBRG strings. Requires letters be written in WUBRG order.
+    #Returns 0 on any string that doesn't start with a WUBRG letter (including 'C')
+    #Extracts color info from strings that start with colors (e.g. colorInt('UR2')=10=colorInt('UR'))
+    color_int=0
+    if colorString=="" or type(colorString)!=str:
+        return 0
+    if colorString.startswith('W'):
+        color_int=1
+        colorString=colorString[1:]
+    if colorString.startswith('U'):
+        color_int+=2
+        colorString=colorString[1:]
+    if colorString.startswith('B'):
+        color_int+=4
+        colorString=colorString[1:]
+    if colorString.startswith('R'):
+        color_int+=8
+        colorString=colorString[1:]
+    if colorString.startswith('G'):
+        color_int+=16
+    return color_int
+    #If speed is an issue, could just make the 32 case match statement
+
 def rankToNum(name:str):
     match name:
         case 'bronze':
@@ -113,8 +144,10 @@ def rankToNum(name:str):
             return 6
         case _:
             return 0
-def getCardsWithMV(mv, set_abbr="ltr"): #returns a list of all card names from a given set with a given mana value (mv)
+def getCardsWithMV(conn, mv, set_abbr="ltr"): #returns a list of all card names from a given set with a given mana value (mv)
     #all cards with 8+ mv get sorted into the same bucket
+    metadata=MetaData()
+    metadata.reflect(bind=conn)
     card_table=metadata.tables[set_abbr+'CardInfo']
     s=select(card_table.c.name,card_table.c.mana_value)
     carddf=pd.read_sql_query(s,conn)
@@ -124,11 +157,12 @@ def getCardsWithMV(mv, set_abbr="ltr"): #returns a list of all card names from a
         cards=carddf[carddf['mana_value']>=MAXMV]['name'].to_list()
     return cards
 
-def getCardsWithColor(color, set_abbr='ltr',include_multicolor=True, include_lands=False, as_string=False):
+
+def getCardsWithColor(conn, color, set_abbr='ltr',include_multicolor=True, include_lands=False, as_string=False):
     #Returns list of all cards with matching the given color
     #If as_string=True gives their names, otherwise gives their index in cardInfo
     #Color is determined (in setinfo.py) by mana cost. Could be misleading on some cards like DFCs, adventures, alternate costs, etc.
-    carddf=cardInfo(set_abbr)
+    carddf=cardInfo(conn, set_abbr)
     colors=['W','U','R','B','G','C']
     if color in colors:
         c=colors.index(color)
@@ -153,40 +187,44 @@ def getCardsWithColor(color, set_abbr='ltr',include_multicolor=True, include_lan
     return cards
 
 
-def getGameDataFrame(archLabel, minRank=0, maxRank=6, set_abbr='ltr'): 
+def getGameDataFrame(main_colors, set_abbr='ltr'): 
     #returns the data gamedata rows of all games fitting the given criteria as a dataframe
     #trade off of using too much memory vs reading the raw data too many times which is slow
+    conn = engine_loc.connect()
+    metadata = MetaData()
     metadata.reflect(bind=engine_loc)
     game_data_table=metadata.tables[set_abbr+'GameData']
-    ranks=[None,'bronze','silver','gold','platinum','diamond','mythic']
-    ranks=ranks[minRank:maxRank+1]
-    q=select(game_data_table).where(game_data_table.c.main_colors==archLabel,
-                                        game_data_table.c.rank.in_(ranks))
+    q=select(game_data_table).where(game_data_table.c.main_colors==main_colors)
     df=pd.read_sql_query(q,conn)
-
+    conn.close()
     return df
 
 
 
-def countCurve(gamesDF,set_abbr='ltr'):
+def countCurve(gamesdf,carddf):
     #given a dataframe of games, returns total number of cards of each MV in those games
+    #carddf should be the output of cardInfo for the relevant set
     #returns in the form [0 drops, ..., 8+ drops, lands]
     curve=[0]*10
-    for m in range(-1,MAXMV+1):
-        cards=getCardsWithMV(m,set_abbr=set_abbr)
-        mv=m%10
+    for m in range(-1,8):
+        cards=carddf[carddf['mana_value']==m]['name'].to_list()
+        mv=m%10 
         for card in cards:
             c='deck_'+card
-            curve[mv]+=int(gamesDF[c].sum())
+            curve[mv]+=int(gamesdf[c].sum())
+    cards=carddf[carddf['mana_value']>=8]['name'].to_list()
+    for card in cards:
+            c='deck_'+card
+            curve[8]+=int(gamesdf[c].sum())
     return curve
 
 
-def countDecklistColors(decks,set_abbr='ltr'):
+def countDecklistColors(conn, decks,set_abbr='ltr'):
     #given an array/dataframe where columns are card counts in set id order, returns number of cards of each color in each row
     #counts multicolor cards as 1 of each color
     colordf=pd.DataFrame({'W':[],'U':[],'B':[],'R':[],'G':[],'C':[]})
     for color in colordf.columns:
-        cards=getCardsWithColor(color, set_abbr=set_abbr)
+        cards=getCardsWithColor(conn, color, set_abbr=set_abbr)
         colordf[color]=decks.iloc[:,cards].sum(axis=1)
     return colordf
 
@@ -194,12 +232,12 @@ def countDecklistColors(decks,set_abbr='ltr'):
 
     
 
-def getArchAvgCurve(archLabel, minRank=0, maxRank=6, set_abbr='ltr'): #Not in use currently
+def getArchAvgCurve(conn, archLabel, set_abbr='ltr'): #Not in use currently
     #returns mean values of lands and each n drop for given archetype
+    metadata=MetaData()
+    metadata.reflect(bind=conn)
     archStats_table=metadata.tables[set_abbr+'ArchGameStats']
-    arid_table=metadata.tables[set_abbr+'ArchRank']
-    q=select(archStats_table).join(arid_table, archStats_table.c.arid==arid_table.c.id).where(arid_table.c.name==archLabel, 
-                                         arid_table.c.rank>=minRank, arid_table.c.rank<=maxRank)
+    q=select(archStats_table).where(archStats_table.c.archLabel==archLabel)
     df=pd.read_sql_query(q,conn)
     dfTotal=df.iloc[0:,3:].sum() 
     if dfTotal['game_count']!=0:
@@ -209,27 +247,28 @@ def getArchAvgCurve(archLabel, minRank=0, maxRank=6, set_abbr='ltr'): #Not in us
     else:
         return dfTotal.iloc[1:] #should be all 0s as this is the 'no games meet these conditions' case
 
-def getArchWinRate(archLabel, minRank=0, maxRank=6, set_abbr='ltr'):
+def getArchWinRate(conn, archLabel,set_abbr='ltr'): #Will just get baked into Archetype table
+    metadata=MetaData()
+    metadata.reflect(bind=conn)
     archStats_table=metadata.tables[set_abbr+'ArchGameStats']
-    arid_table=metadata.tables[set_abbr+'ArchRank']
-    q1=select(func.sum(archStats_table.c.game_count).label('games')).join(arid_table,archStats_table.c.arid==arid_table.c.id).where(arid_table.c.name==archLabel,
-                                                                                    arid_table.c.rank>=minRank,
-                                                                                    arid_table.c.rank<=maxRank)                                                                                 
+    arch_table=metadata.tables[set_abbr+'Archetypes']
+    q1=select(func.sum(archStats_table.c.game_count).label('games')).join(arch_table,archStats_table.c.arch_id==arch_table.c.id).where(arch_table.c.archLabel==archLabel)                                                                                 
     games_played=pd.read_sql_query(q1,conn).at[0,'games']
     q1=q1.where(archStats_table.c.won==True)
     wins=pd.read_sql_query(q1,conn).at[0,'games']
     if games_played==0: return 0
     else: return wins/games_played
 
-def getCardInDeckWinRates(archLabel='ALL', minCopies=1, maxCopies=40, minRank=0, maxRank=6, set_abbr='ltr'): #Not in use
+def getCardInDeckWinRates(conn,archLabel='ALL', minCopies=1, maxCopies=40,set_abbr='ltr'): #Not in use
+    metadata=MetaData()
+    metadata.reflect(bind=conn)
     cg_table=metadata.tables[set_abbr+'CardGameStats']
-    arid_table=metadata.tables[set_abbr+'ArchRank']
-    q=select(cg_table.c.id,func.sum(cg_table.c.win_count).label("wins"),func.sum(cg_table.c.game_count).label("games_played")).join(arid_table, cg_table.c.arid==arid_table.c.id).where(
+    arch_table=metadata.tables[set_abbr+'Archetypes']
+    q=select(cg_table.c.id,func.sum(cg_table.c.win_count).label("wins"),func.sum(cg_table.c.game_count).label("games_played")).join(arch_table, cg_table.c.arch_id==arch_table.c.id).where(
                                                                             cg_table.c.copies>=minCopies,
-                                                                            cg_table.c.copies<=maxCopies,
-                                                                            arid_table.c.rank>=minRank,arid_table.c.rank<=maxRank).group_by(cg_table.c.id)
+                                                                            cg_table.c.copies<=maxCopies).group_by(cg_table.c.id)
     if archLabel!='ALL':
-        q=q.where(arid_table.c.name==archLabel)
+        q=q.where(arch_table.c.name==archLabel)
     df=pd.read_sql_query(q,conn)
     tempgames=df['games_played'].mask(df['games_played']==0,1) #Used so that 0wins/0games->0%
     df['win_rate']=df['wins']/tempgames
@@ -243,12 +282,14 @@ def winRateFromCounts(df): #returns win rate of data frame with a game count and
     else: return wins/games
 
 
-def meanGameLength(archLabel, minRank=0, maxRank=6, won=-1, set_abbr='ltr'):  #Not in use
+def meanGameLength(conn,archLabel, minRank=0, maxRank=6, won=-1, set_abbr='ltr'):  #Not in use
+    metadata=MetaData()
+    metadata.reflect(bind=conn)
     ag_table=metadata.tables[set_abbr+'ArchGameStats']
     arid_table=metadata.tables[set_abbr+'ArchRank']
     #use won=0 to only count losses, won=1 to only count wins, archLabel='any' to include all archetypes
     q1=select(func.sum(ag_table.c.game_count).label('games'),
-        func.sum(ag_table.c.game_count * ag_table.c.turns).label('turns')).join(
+        func.sum(ag_table.c.g * ag_table.c.turns).label('turns')).join(
                                         arid_table, ag_table.c.arid==arid_table.c.id).where(
                                         arid_table.c.rank>=minRank,
                                         arid_table.c.rank<=maxRank)
@@ -261,13 +302,14 @@ def meanGameLength(archLabel, minRank=0, maxRank=6, won=-1, set_abbr='ltr'):  #N
     if total_games==0: return 0
     else: return total_turns/total_games
 
-def recordByLengthDB(archLabel, minRank=0, maxRank=6,set_abbr='ltr'):
+def recordByLengthDB(conn,archLabel, set_abbr='ltr'):
     #given archetype and range of ranks, returns df with wins and total games at each game length
     #game lengths <=5 turns and >=14 turns are grouped together 
+    metadata=MetaData()
+    metadata.reflect(bind=conn)
     ag_table=metadata.tables[set_abbr+'ArchGameStats']
-    arid_table=metadata.tables[set_abbr+'ArchRank']
-    q=select(ag_table.c.turns,ag_table.c.won,ag_table.c.game_count).join(arid_table, ag_table.c.arid==arid_table.c.id).where(arid_table.c.name==archLabel, 
-                                         arid_table.c.rank>=minRank, arid_table.c.rank<=maxRank)
+    arch_table=metadata.tables[set_abbr+'Archetypes']
+    q=select(ag_table.c.turns,ag_table.c.won,ag_table.c.game_count).join(arch_table, ag_table.c.arch_id==arch_table.c.id).where(arch_table.c.archLabel==archLabel)
     df=pd.read_sql_query(q,conn)
     counts=df[['turns','game_count']].groupby('turns').sum()
     winsdf=df[df['won']==1]
@@ -300,6 +342,18 @@ def winRatesByTurnDF(df):
     games=games.mask(games==0,1)
     return wins/games 
 
+def medianPick(pickdf: pd.Series):
+    #pickdf should be a series where the index is the pick number (0-13) 
+    #and the values are the # of appearances of a given card at that pick number
+    #Returns the pick number by which 50% of the copies of that card have been taken
+    #e.g. medpick=5 means that after 4 picks less than half have been taken, but after 5 picks more than half hae been taken
+    half=pickdf[0]/2
+    postmedian=pickdf[pickdf<half]
+    medpick=postmedian.index.min()
+    return medpick
+    
+def meanPick(pickdf: pd.Series):
+   return pickdf.sum()/pickdf[0]
 
 def gameLengthDistDF(df):
     #given a game dataframe, returns series with game lengths as indices and proportion of games of that length as values

@@ -2,10 +2,11 @@ import sqlite3, time
 import pandas as pd
 import numpy as np
 from statfunctions import cardInfo, rankToNum
+from sqlalchemy import Integer
 
 
 #These will only run properly if the draft data set is in the same directory 
-chunksize = 42*45*2
+chunksize = 42*45*3
 #carddf=cardInfo(set_abbr=setName)
 #id_dict={'pack_card_'+carddf.at[i,'name']:str(i) for i in carddf.index}
 
@@ -14,7 +15,7 @@ def makeDraftInfo(conn, set_abbr='ltr'):
     draft_table=set_abbr+"DraftInfo"
     address=r".\draft_data_public."+set_abbr.upper()+".PremierDraft.csv"
     draftdf=pd.DataFrame({'draft_id':[],'draft_time':[], 'rank':[], 'event_match_wins':[],'event_match_losses':[]})
-    print("Started reading csv")
+    print("Started reading draft csv")
     progresscount=0
     for chunk in pd.read_csv(address,chunksize=chunksize):
         df = pd.DataFrame(chunk)
@@ -44,20 +45,29 @@ def processPacks(conn, set_abbr='ltr'):
             col_indices.append(i)
     count=0
     for chunk in pd.read_csv(address,chunksize=chunksize):
-        df = pd.DataFrame(chunk)      
+        df = pd.DataFrame(chunk)    
+        df.fillna(0,inplace=True)  
         #df.rename(columns=id_dict,inplace=True) #for if we want keys to be the idx of [cardname] in cardInfo rather than pack_card_[cardname]
         contentdf=df.iloc[:,col_indices].groupby(['pack_number','pick_number']).sum()
         if count==0:
             totaldf=contentdf
             count+=1
         else:
-            totaldf=totaldf+contentdf
-            count+=1
+            if contentdf.shape==totaldf.shape:
+                totaldf=totaldf+contentdf
+                count+=1
+            else:
+                print("Mismatch. Incomplete draft data somewhere.")
+                for idx in contentdf.index:
+                    totaldf.loc[idx]+=contentdf.loc[idx] 
+                    count+=1
             if count%100==0:
                 print("Processed {} packs in {} seconds".format((count*chunksize),round(time.time()-t0,3)))
-    totaldf.to_sql(pack_table,con=conn,if_exists='replace',index=True)
+                print(totaldf.shape)
+    totaldf=totaldf.astype('int64')
+    totaldf.to_sql(pack_table,con=conn,if_exists='replace',index=True,dtype=Integer)
+    conn.commit()
     print("Finished pack table")
-makeDraftInfo()
-processPacks()        
+     
 
 

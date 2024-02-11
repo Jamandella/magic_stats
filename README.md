@@ -67,7 +67,7 @@ Before you begin, ensure you have installed the following on your computer:
   git clone https://github.com/Jamandella/magic_stats
   ```
 
-**Note:** If you are contributing to this project you should fork this repository and then clone your forked repository onto your computer.
+**Note:** If you are contributing to this project you should first fork this repository and then clone your forked repository onto your computer.
 
 **2. Navigate to the project directory:**
 
@@ -75,21 +75,34 @@ Before you begin, ensure you have installed the following on your computer:
   cd magic_stats
   ```
 
+  **Note:** You do not need to run `npm install`. This repository already contains the node modules required for the frontend. While this is unusual, this is because (reasons here). For more details refer to the [project structure](#project-structure) section of this document below.
+
+<!-- Josh, briefly explain why the node modules are already pre-installed in the project -->
+
 **3. Install backend dependencies:**
 
   ```bash
   pip3 install -r requirements.txt
   ```
 
-**4. Run the project:**
+**4. Run the project backend:**
 
   ```bash
-  pyton3 app.py
+  python3 app.py
   ```
 
-**Note:** You do not need to run `npm install`. This repository already contains the node modules required for the frontend. While this is unusual, this is because (reasons here). For more details refer to the [project structure](#project-structure) section of this document below.
+**5. Run the project frontend:**
 
-<!-- Josh, briefly explain why the node modules are already pre-installed in the project -->
+  Navigate to `/frontend` inside the root project directory.
+
+  Next, run the following command:
+
+  ```bash
+  npm run serve
+  ```
+**Note:** In order to see any frontend changes reflected in the backend, you will need to run `npm run build` inside of the `/frontend` directory and then restart the backend server. 
+
+For frontend development, you should only need to run the development server using `npm run serve`.
 
 ## Project Structure
 
@@ -114,7 +127,7 @@ The frontend is a React application built using Vite, a frontend build tool. It 
 ### Backend
 
 <!-- Josh -->
-<!-- An explaination of how the mixed deployment is working would be good to include in here.  -->
+<!-- An explaination of how the mixed deployment is working would be good to include in here as well as anything else that you think is relevant.  -->
 
 ## Contributing
 
@@ -193,4 +206,4 @@ This project is licensed under the [License Name](LICENSE) - see the [LICENSE](L
 
 ---
 
-<!-- Feel free to adapt and expand this template to suit your project's specific needs. The key is to make the README informative and user-friendly, providing all the necessary information for users, contributors, and team members to understand and work with your project. -->
+<!-- The key is to make the README informative and user-friendly, providing all the necessary information for users, contributors, and team members to understand and work with your project. -->

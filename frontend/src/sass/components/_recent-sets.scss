@@ -1,0 +1,18 @@
+@use "../abstracts/" as *;
+
+.recent-sets {
+  --grid-gap: #{$fluid-size-s};
+
+  &__list {
+    display: grid;
+    gap: var(--grid-gap, $grid-gap);
+
+    @include mq(small) {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    @include mq(large) {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+}
