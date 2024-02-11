@@ -62,6 +62,7 @@ def Put_User():#googleid:int, firstname:str, lastname:str, isadmin:str, accountc
 #    conn, cursor = create_conn()
 #    return UserRowJson
 
+
 @flask_app.route('/MTGsets', methods = ['GET']) #get a complete list of the MTG sets that are draftable and their 3 letter codes in a json
 @cross_origin()
 def Get_MTGsets():
@@ -106,4 +107,3 @@ def Get_MTGsets():
 #    conn, cursor = create_conn()
 #    conn.close()
 #    return UserRowJson
-#"""
