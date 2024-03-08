@@ -222,9 +222,8 @@ def populateArchetypes(conn):
           'WG','UG','WUG','BG','WBG','UBG','WUBG','RG','WRG','URG','WURG','BRG','WBRG','UBRG','WUBRG'] 
     df=pd.DataFrame({'id':[],'archLabel':[],'num_drafts':[],'num_wins':[],'num_losses':[]})
     for i in range(len(arcs)):
-        df.loc[i]=(i, arcs[i], 0, 0, 0)  #todo: After filling in draft info/decklists, use that to count drafts and records
-    df.loc[df.shape[0]]=(-1, 'ALL', 0, 0, 0)
-    #df.to_sql(set_abbr+'Archetypes',conn, index=False, if_exists='replace')
+        df.loc[i]=(i, arcs[i], 0, 0, 0) 
+    df.loc[df.shape[0]]=(-1, 'ALL', 0, 0, 0) 
     df.to_sql(set_abbr+'Archetypes',conn, index=False, if_exists='append')
     conn.commit()
 
@@ -235,6 +234,7 @@ def completeArchetypes(conn): #Untested
     arch_game_table=Base.metadata.tables[set_abbr+'ArchGameStats']
     s=select(arch_table)
     archdf=pd.read_sql_query(s,conn,index_col='id')
+    totals={'drafts':0,'wins':0,'losses':0}
     for i in archdf.index:
         if i>=0: 
             count_draft_q=select(func.count(1).label('drafts')).where(decklist_table.c.arch_id==i)
@@ -247,9 +247,12 @@ def completeArchetypes(conn): #Untested
             else: wins=0
             if 0 in gamedf.index: losses=gamedf.at[0,'games']
             else: losses=0
+            totals['drafts']+=drafts
+            totals['wins']+=wins
+            totals['losses']+=losses
             u=update(arch_table).where(arch_table.c.id==int(i)).values(num_drafts=int(drafts),num_wins=int(wins),num_losses=int(losses))
             conn.execute(u)
-    
+    u=update(arch_table).where(arch_table.c.id==-1).values(num_drafts=int(totals[drafts]),num_wins=int(totals[wins]),num_losses=int(totals[losses]))
     conn.commit()
 
 def populateCardTable(conn):
@@ -307,7 +310,7 @@ def populateArchGameTable(conn):
     archDF.index=archDF['id']
     carddf=cardInfo(conn,set_abbr=set_abbr)
     #first=True
-    for i in archDF.index:
+    for i in range(1,32): #needs to exclude archetype 'ALL'. Archetype 'C' for colorless is also excluded but in theory could exist.
         main_colors=archDF.at[i,'archLabel'] #Uses that archetype=colors at the moment. Will need to adapt when more archs exist.
         print("Filling in {} data".format(main_colors))
         df=getGameDataFrame(main_colors=main_colors,set_abbr=set_abbr)
@@ -375,37 +378,34 @@ def populateCardGameTable(conn):
         conn.commit()
     conn.commit()
 
-def populateCardStats(conn): #todo: make the actual table, fill with all stats that would be indexed by arc/card/rankrange
-    #incomplete
-    arID_table=Base.metadata.tables[set_abbr+'ArchRank']
-    card_table=Base.metadata.tables[set_abbr+'CardInfo']
-    q1=select(arID_table)
-    aridDF=pd.read_sql_query(q1,conn)
-    arcs=aridDF['name'].unique()
-    q2=select(card_table.c.name.label('card_name'),card_table.c.id.label('card_id'))
-    cardDF=pd.read_sql_query(q2,conn)
-    for arcLabel in arcs:
-        df=getGameDataFrame(main_colors=arcLabel,set_abbr=set_abbr)
-        minRank=0
-        while minRank<=6:
-            0
-def populateCardInHandStats(conn):
-    #Bugged. Some sort of card_id mismatch
+def populateDerivedStats(conn):
     Base.metadata.reflect(bind=conn)
     derived_table=Base.metadata.tables[set_abbr+'CardDerivedStats']
     cardDF=cardInfo(conn=conn,set_abbr=set_abbr)
     cardNameToID={cardDF.loc[idx,'name']:idx for idx in cardDF.index}
-    totalsDF=pd.Dataframe()
     for color_id in range(32):
         colors=colorString(color_id)
-        gamesInHandDF=gameInHandByColors(main_colors=colors,set_abbr=set_abbr) 
+        colorGamesDF=getGameDataFrame(main_colors=colors,set_abbr=set_abbr)
+        gamesInHandDF=gameInHandTotals(colorGamesDF)
+        winShares,appearances=winSharesTotals(colorGamesDF)
+        ws_per_appearance={}
+        for card_name in appearances.keys():
+            if appearances[card_name]==0:
+                ws_per_appearance[card_name]=0
+            else:
+                ws_per_appearance[card_name]=winShares[card_name]/appearances[card_name]
         if color_id==0:
-            totalsDF=gamesInHandDF.copy()
+            handTotalsDF=gamesInHandDF.copy()
+            cumulativeWinShares=winShares.copy()
+            cumulativeAppearances=appearances.copy()
         else:
-            totalsDF=totalsDF+gamesInHandDF
-        for card in gamesInHandDF.index:
-            u=update(derived_table).where(derived_table.c.card_id==cardNameToID[card],derived_table.c.arch_id==color_id).values(
-                games_in_hand=int(gamesInHandDF.loc[card,'games']),wins_in_hand=int(gamesInHandDF.loc[card,'wins'])
+            handTotalsDF=handTotalsDF+gamesInHandDF
+            cumulativeWinShares=cumulativeWinShares+winShares
+            cumulativeAppearances=cumulativeAppearances+appearances
+        for card_name in gamesInHandDF.index:
+            u=update(derived_table).where(derived_table.c.card_id==cardNameToID[card_name],derived_table.c.arch_id==color_id).values(
+                games_in_hand=int(gamesInHandDF.loc[card_name,'games']),wins_in_hand=int(gamesInHandDF.loc[card_name,'wins']),
+                avg_win_shares=ws_per_appearance[card_name]
             )
             conn.execute(u)
         """update_list=[{'arch_id':color_id, 'card_id': gamesInHandDF.loc[idx,'card_id'], 
@@ -414,13 +414,21 @@ def populateCardInHandStats(conn):
         conn.execute(update(derived_table),update_list)""" 
         #Bulk insert should be a bit faster, but seems to have an issue with composite primary key. 
         #Biggest time cost is in the getGameDataFrame step, so this improvement is small.
-        print("Finished", colorString(color_id), "games in hand")
+        print("Finished", colorString(color_id), "derived stats")
         conn.commit()
-    for card in totalsDF.index:
-        u=update(derived_table).where(derived_table.c.card_id==cardNameToID[card],derived_table.c.arch_id==-1).values(
-            games_in_hand=int(totalsDF.loc[card,'games']),wins_in_hand=int(totalsDF.loc[card,'wins'])
+    overall_ws_per_appearance={}
+    for card_name in handTotalsDF.index: #Fill in stats for archetype 'ALL'
+        if cumulativeAppearances[card_name]==0:
+                overall_ws_per_appearance[card_name]=0
+        else:
+            overall_ws_per_appearance[card_name]=cumulativeWinShares[card_name]/cumulativeAppearances[card_name]
+        u=update(derived_table).where(derived_table.c.card_id==cardNameToID[card_name],derived_table.c.arch_id==-1).values(
+            games_in_hand=int(handTotalsDF.loc[card_name,'games']),wins_in_hand=int(handTotalsDF.loc[card_name,'wins']),
+            avg_win_shares=overall_ws_per_appearance[card_name]
         )
         conn.execute(u)
+    conn.commit()
+    print("Finished overall derived stats")
 
 
 
@@ -543,11 +551,6 @@ def buildDBServer(conn): #Only run this if you are building/rebuilding from the 
     print("Filled in archetype summaries")
     print("Done")
     conn.commit()
-Base.metadata.reflect(bind=conn2)
-populateCardInHandStats(conn2)
-cds_table=Base.metadata.tables[set_abbr+'CardDerivedStats']
-s=select(cds_table).where(cds_table.c.card_id==2)
-cur=conn2.execute(s)
-print(cur.fetchall())
+tableCensus(conn2)
 conn1.close()
 conn2.close()
