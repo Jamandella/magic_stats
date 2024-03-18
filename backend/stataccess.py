@@ -1,3 +1,5 @@
+#Functions for reading and deriving statistics from the database
+
 import pandas as pd
 from sqlalchemy import MetaData, select, create_engine, func
 from dbpgstrings import host, database, user, password 
@@ -6,13 +8,12 @@ engine=create_engine(url="postgresql://{0}:{1}@{2}:{3}/{4}".format(
 
 
 def cardInfo(set_abbr='ltr',as_json=False):
-    
     conn = engine.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine)
     #Returns the full card info table for the given set. Defaults to returning a pandas dataframe, with an option for json instead.
-    table_name=set_abbr+'CardInfo'
-    s="SELECT * FROM {}".format(table_name)
+    card_table=metadata.tables[set_abbr+'CardInfo']
+    s=select(card_table)
     df=pd.read_sql_query(s,conn,index_col='id')
     conn.close()
     if as_json:return df.to_json()
@@ -78,7 +79,7 @@ def getArchBasics(archLabel,set_abbr='ltr'):
     q1=select(arch_table.c.num_drafts,arch_table.c.num_wins,arch_table.c.numlosses).where(arch_table.c.archLabel==archLabel)                                                                             
     df=pd.read_sql_query(q1,conn)
     return df.to_json()
-def getCardInDeckWinRates(archLabel='ALL', minCopies=1, maxCopies=40, set_abbr='ltr', as_json=True): 
+def getCardInDeckWinRates(archLabel='ALL', minCopies=1, maxCopies=40, set_abbr='ltr', index_by_name=False,as_json=True): 
 #Returns game played win rates for all cards, indexed by their numerical id from CardInfo table. Can be restricted to specific decks and ranks.
 #Can also require a specific range of copies of each card.
     conn = engine.connect()
@@ -86,15 +87,28 @@ def getCardInDeckWinRates(archLabel='ALL', minCopies=1, maxCopies=40, set_abbr='
     metadata.reflect(bind=engine)
     cg_table=metadata.tables[set_abbr+'CardGameStats']
     arch_table=metadata.tables[set_abbr +'Archetypes']
-    q=select(cg_table.c.id,func.sum(cg_table.c.win_count).label("wins"),func.sum(cg_table.c.game_count).label("games_played")).join(arch_table, cg_table.c.arch_id==arch_table.c.id).where(
+    if index_by_name:
+        card_table=metadata.tables[set_abbr+'CardInfo']
+        q=select(card_table.c.name,func.sum(cg_table.c.win_count).label("wins"),
+                 func.sum(cg_table.c.game_count).label("games_played")).join(
+                    arch_table, cg_table.c.arch_id==arch_table.c.id).join(
+                    card_table, cg_table.c.id==card_table.c.id).where(
+                     cg_table.c.copies>=minCopies,
+                     cg_table.c.copies<=maxCopies).group_by(card_table.c.name)
+        if archLabel!='ALL':
+            q=q.where(arch_table.c.archLabel==archLabel)
+        df=pd.read_sql(q,conn,index_col='name')
+    else:
+        q=select(cg_table.c.id,func.sum(cg_table.c.win_count).label("wins"),func.sum(cg_table.c.game_count).label("games_played")).join(arch_table, cg_table.c.arch_id==arch_table.c.id).where(
                                                                             cg_table.c.copies>=minCopies,
                                                                             cg_table.c.copies<=maxCopies).group_by(cg_table.c.id)
-    if archLabel!='ALL':
-        q=q.where(arch_table.c.archLabel==archLabel)
-    df=pd.read_sql_query(q,conn)
+        if archLabel!='ALL':
+            q=q.where(arch_table.c.archLabel==archLabel)
+        df=pd.read_sql_query(q,conn,index_col='id')
     conn.close()
     tempgames=df['games_played'].mask(df['games_played']==0,1) #Used so that 0wins/0games->0%
     df['win_rate']=df['wins']/tempgames
+    df.sort_index(inplace=True)
     if as_json: return df.to_json()
     else: return df
 
@@ -150,3 +164,98 @@ def getCardRecordByCopies(card_name:str, main_colors='ALL', set_abbr='ltr'):
     df=df.T
     conn.close()
     return df.to_json()
+def getGameInHandWR(main_colors='ALL',set_abbr='ltr', as_json=True,index_by_name=False):
+    #Returns game in hand win rate for all cards in the given set. May be filtered by archetype, or 'ALL' to count all games.
+    #Includes both win rate and number of games in hand, which is the sample size.
+    #Cards are labeled by their id in the CardInfo table, unless index_by_name=True, then they use their card names
+    conn = engine.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine)
+    cds_table=metadata.tables[set_abbr+'CardDerivedStats']
+    arch_table=metadata.tables[set_abbr+'Archetypes']
+    if index_by_name:
+        card_table=metadata.tables[set_abbr+'CardInfo']
+        s=select(cds_table.c.games_in_hand,cds_table.c.wins_in_hand,card_table.c.name).join(
+            arch_table,cds_table.c.arch_id==arch_table.c.id).join(card_table,cds_table.c.card_id==card_table.c.id).where(
+            arch_table.c.archLabel==main_colors    
+            )
+        resultDF=pd.read_sql(s,conn,index_col='name')
+    else:
+        s=select(cds_table.c.games_in_hand,cds_table.c.wins_in_hand,cds_table.c.card_id).join(
+            arch_table,cds_table.c.arch_id==arch_table.c.id).where(arch_table.c.archLabel==main_colors)
+        resultDF=pd.read_sql(s,conn,index_col='card_id')
+    tempgames=resultDF['games_in_hand'].mask(resultDF['games_in_hand']==0,1)
+    resultDF['win_rate']=resultDF['wins_in_hand']/tempgames
+    resultDF.drop('wins_in_hand',axis=1,inplace=True)
+    if as_json: return resultDF.to_json()
+    else: return resultDF
+def getAverageWinShares(main_colors='ALL',set_abbr='ltr',as_json=True,index_by_name=False):
+    #Returns average win shares per appearance for all cards in the given set. May be filtered by archetype, or 'ALL' to count all games.
+    #Includes both win shares and number of games in hand, which is the sample size.
+    #Cards are labeled by their id in the CardInfo table
+    conn = engine.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine)
+    cds_table=metadata.tables[set_abbr+'CardDerivedStats']
+    arch_table=metadata.tables[set_abbr+'Archetypes']
+    if index_by_name:
+        card_table=metadata.tables[set_abbr+'CardInfo']
+        s=select(cds_table.c.games_in_hand,cds_table.c.avg_win_shares,card_table.c.name).join(
+            arch_table,cds_table.c.arch_id==arch_table.c.id).join(card_table,cds_table.c.card_id==card_table.c.id).where(
+            arch_table.c.archLabel==main_colors)
+        resultDF=pd.read_sql(s,conn,index_col='name')    
+
+    else:    
+        s=select(cds_table.c.games_in_hand,cds_table.c.avg_win_shares,cds_table.c.card_id).join(
+            arch_table,cds_table.c.arch_id==arch_table.c.id).where(arch_table.c.archLabel==main_colors)
+        resultDF=pd.read_sql(s,conn,index_col='card_id')
+    if as_json: return resultDF.to_json()
+    else: return resultDF
+
+def getArchWinRatesByMulls(main_colors='ALL',set_abbr='ltr', as_json=True):
+    #Returns win rates and number of games played on play, draw, and overall by number of mulligans taken.
+    #Any game with 3 or more mulligans is grouped into num_mulligans=3.
+    #If main_colors='ALL', returns cumulative records where games for all archetypes are included
+    conn = engine.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine)
+    start_table=metadata.tables[set_abbr+'ArchStartStats']
+    arch_table=metadata.tables[set_abbr+'Archetypes']
+    s=select(start_table.c.num_mulligans,start_table.c.on_play,start_table.c.win_count,start_table.c.game_count).join(
+            arch_table,start_table.c.arch_id==arch_table.c.id).where(arch_table.c.archLabel==main_colors)
+    resultDF=pd.read_sql_query(s,conn)
+    resultDF.sort_values(['num_mulligans','on_play'],inplace=True)
+    print(resultDF.head())
+    outputDF=pd.DataFrame({'num_mulligans':[],'games_on_play':[],'wr_on_play':[],'games_on_draw':[],
+                           'wr_on_draw':[],'games_total':[],'wr_total':[]})
+    for mulls in range(4):
+        games_on_draw=resultDF.loc[2*mulls,'game_count']
+        games_on_play=resultDF.loc[2*mulls+1,'game_count']
+        games_total=games_on_draw+games_on_play
+        wins_on_draw=resultDF.loc[2*mulls,'win_count']
+        wins_on_play=resultDF.loc[2*mulls+1,'win_count']
+        wr_on_draw=round(wins_on_draw/max(games_on_draw,1),2)
+        wr_on_play=round(wins_on_play/max(games_on_play,1),2)
+        wr_total=round((wins_on_play+wins_on_draw)/max(games_total,1),2)
+        outputDF.loc[mulls]=[int(mulls),int(games_on_play),wr_on_play,int(games_on_draw),wr_on_draw,int(games_total),wr_total]
+    if as_json: return outputDF.to_json()
+    else: return outputDF
+def getPlayDrawSplits(set_abbr='ltr', as_json=True):
+    #Returns record and win rate on the play and on the draw for each archetype
+    #Index is (int arch_id, bool on_play)
+    #Values are archetype name, total wins, total games, win %. 
+    conn = engine.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine)    
+    start_table=metadata.tables[set_abbr+'ArchStartStats']
+    arch_table=metadata.tables[set_abbr+'Archetypes']
+    s=select(arch_table.c.archLabel,func.max(start_table.c.arch_id).label("arch_id"),start_table.c.on_play,func.sum(start_table.c.win_count).label('wins'),
+             func.sum(start_table.c.game_count).label('games')).join(
+            arch_table,start_table.c.arch_id==arch_table.c.id).group_by(arch_table.c.archLabel,start_table.c.on_play)
+    resultDF=pd.read_sql_query(s,conn,index_col=['arch_id','on_play'])
+    resultDF['win_rate']=resultDF['wins']/(resultDF['games'].mask(resultDF['games']==0,1))
+    resultDF.sort_index(inplace=True)
+    if as_json: return resultDF.to_json
+    else: return resultDF
+
+print(getArchWinRatesByMulls())
