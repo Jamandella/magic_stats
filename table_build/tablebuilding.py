@@ -8,7 +8,7 @@ from setinfo import scrape_scryfall
 from dbpgstrings import host, database, user, password
 import time
 
-set_abbr='ltr'#This determines which set we are working with. Current options: ltr, dmu, bro
+set_abbr='dmu'#This determines which set we are working with. Current options: ltr, dmu, bro
 engine1 = create_engine("sqlite:///23spells.db", echo=False) #used to build tables locally. use only for GameData.
 conn1 = engine1.connect()
 port='5432'
@@ -142,7 +142,13 @@ class CardDerivedStats(Base):
     #adjusted_iwd: not yet implemented. planned to be impact when drawn, rescaled to control for game length bias
     #inclusion_impact: not yet implemented. some version of difference between gpwr for decks running and not running this card 
 
-
+class ArchStartStats(Base):
+    __tablename__=set_abbr+"ArchStartStats"
+    arch_id=mapped_column(SmallInteger, ForeignKey(set_abbr+'Archetypes.id'), primary_key=True)
+    num_mulligans=mapped_column(SmallInteger, primary_key=True)
+    on_play=mapped_column(Boolean, primary_key=True)
+    win_count=mapped_column(Integer)
+    game_count=mapped_column(Integer)
 
 #Table Building
 def createDecklists(conn): 
@@ -172,9 +178,11 @@ def createDecklists(conn):
    
 
 def populateDecklists(conn):
+    #Takes about 20min for a full draft format.
     #currently has a small data duplication error stemming from the same deck having games in multiple chunks
     #this results in about 1 in 20K decks appearing twice.
-    #For space and simplicity, only contains the first build of each deck.
+    #For space and simplicity, only contains the first build of each deck. 
+    #Using the mean (or rounded mean) decklist for each draft may be preferrable. Code to do that is currently commented out.
     Base.metadata.reflect(bind=conn)
     deck_table=Base.metadata.tables[set_abbr+"Decklists"]
     t0=time.time()
@@ -191,6 +199,8 @@ def populateDecklists(conn):
     cols=[game_data_table.c.index,game_data_table.c.draft_id,game_data_table.c.draft_time,game_data_table.c.rank,game_data_table.c.main_colors]
     card_cols=[getattr(game_data_table.c,'deck_'+card).label(card) for card in cards]
     cols.extend(card_cols)
+    #card_means=[func.mean(getattr(game_data_table.c,'deck_'+card)).label(card) for card in cards] #To find average decklist rather than first
+    #cols.extend(card_means)  
     prevIndex=0
     for k in range(size//200000+1):
         s=select(*cols,func.sum(game_data_table.c.won).label('wins'),func.count(1).label('games')).group_by(
@@ -227,7 +237,7 @@ def populateArchetypes(conn):
     df.to_sql(set_abbr+'Archetypes',conn, index=False, if_exists='append')
     conn.commit()
 
-def completeArchetypes(conn): #Untested
+def completeArchetypes(conn):
     Base.metadata.reflect(bind=conn)
     arch_table=Base.metadata.tables[set_abbr+'Archetypes']
     decklist_table=Base.metadata.tables[set_abbr+'Decklists']
@@ -430,6 +440,26 @@ def populateDerivedStats(conn):
     conn.commit()
     print("Finished overall derived stats")
 
+def populateArchStartStats(conn):
+    Base.metadata.reflect(bind=conn)
+    table_name=set_abbr+'ArchStartStats'
+    totalDF=pd.DataFrame({'arch_id':[-1]*8,'num_mulligans':[0,0,1,1,2,2,3,3],'on_play':[False,True]*4,'win_count':[0]*8,'game_count':[0]*8})
+    for color_id in range(32):
+        colors=colorString(color_id)
+        colorGamesDF=getGameDataFrame(main_colors=colors,set_abbr=set_abbr)
+        recordDF=gameStartCounts(colorGamesDF)
+        recordDF['arch_id']=pd.Series([color_id]*recordDF.shape[0])
+        column_order=['arch_id','num_mulligans','on_play','win_count','game_count']
+        recordDF=recordDF[column_order]
+        #print(recordDF.head())
+        totalDF[['win_count','game_count']]+=recordDF[['win_count','game_count']]
+        recordDF.to_sql(table_name,con=conn2,index=False,if_exists='append')
+        print('Finished',colors,'start stats')
+    #print(totalDF.head())
+    totalDF.to_sql(table_name,con=conn2,index=False,if_exists='append')
+    conn.commit()
+
+
 
 
 def populateImpacts(conn):
@@ -531,6 +561,12 @@ def buildDBLoc(conn): #Only run this if you are building/rebuilding from the gro
     print("Done")
     conn.commit()
 def buildDBServer(conn): #Only run this if you are building/rebuilding from the ground up 
+    #Currently, everything is structured to completely populate one table at a time. 
+    #This is practical for the current process of gradually making new tables.
+    #The most time efficient way to build the tables for an entire set at one time would be to minimize the number of calls.
+    #to getGameDataFrame, or, more specifically, the number of times a large chunk of games is selected from the GameData table.
+    #Ideally then, we should select a chunk of games and then populate the corresponding data to all relevant tables, then move on to the next chunk.
+    #This would require a substantial restructure to the tablebuilding functions, but would save a huge portion of run time.
     clearSet(conn)
     Base.metadata.reflect(bind=conn) 
     Base.metadata.create_all(bind=conn)
@@ -551,6 +587,9 @@ def buildDBServer(conn): #Only run this if you are building/rebuilding from the 
     print("Filled in archetype summaries")
     print("Done")
     conn.commit()
-tableCensus(conn2)
+Base.metadata.reflect(bind=conn2)
+Base.metadata.create_all(bind=conn2)
+populateDerivedStatsIndex(conn2)
+populateDerivedStats(conn2)
 conn1.close()
 conn2.close()

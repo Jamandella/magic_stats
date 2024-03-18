@@ -538,3 +538,30 @@ def gameInHandByColors(main_colors, set_abbr='ltr')->pd.DataFrame:
     totals=gameInHandTotals(gameDF)
     return totals
 
+def gameStartCounts(gameDF: pd.DataFrame):
+    #gameDF should be a game dataframe containing the num_mulligans, on_play, and won columns from GameData
+    #Returns a dataframe of records for each pairing of num_mulligans and on_play values
+    #Games with 3 or more mulligans are grouped together.
+    counts=gameDF[['num_mulligans','on_play','won']].value_counts()
+    recordDF=pd.DataFrame({'num_mulligans':[],'on_play':[],'win_count':[],'game_count':[]})
+    for m in range(3):
+        for p in range(2):
+            wins=0
+            games=0
+            if (m,p,0) in counts.index:
+                games+=counts[m,p,0]
+            if (m,p,1) in counts.index:
+                wins+=counts[m,p,1]
+                games+=counts[m,p,1]
+            recordDF.loc[recordDF.shape[0]]=[m,bool(p),wins,games]
+    for p in range(2):
+        wins3=0
+        games3=0
+        for m in range(3,8):
+                if (m,p,0) in counts.index:
+                    games3+=counts[m,p,0]
+                if (m,p,1) in counts.index:
+                    wins3+=counts[m,p,1]
+                    games3+=counts[m,p,1]
+        recordDF.loc[recordDF.shape[0]]=[3,bool(p),wins3,games3]
+    return recordDF
