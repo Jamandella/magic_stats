@@ -69,8 +69,10 @@ def Get_MTGsets():
     conn, cursor = create_conn() #set the cursor to the database
     cursor.execute("SELECT * FROM mtgSets") #select all the MTS sets in Full set name, 3 letter code as the columns
     MTGsets = cursor.fetchall() #set them equal to a local variable
+    MTGsets_json = json.dumps(MTGsets)
     conn.close()
-    return {MTGsets} #return the json
+#    return MTGsets_json
+    return {"response":MTGsets} #return the json
 
 #@flask_app.route('/statuses', methods = ['GET'])
 #@cross_origin()
