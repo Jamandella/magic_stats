@@ -25,7 +25,7 @@ def cardsSeenInDF(gamesDF: pd.DataFrame): #not currently in use
     #given a dataframe of rows from game_data, returns list of number of games with each total number of cards drawn
     cols=[]
     for key in gamesDF.keys():
-        if key[:5]=='drawn' or key[:7]=='opening':
+        if key[:5]=='drawn' or key[:7]=='opening': #should tutored be here too?
             cols.append(key)
     drawnDF=gamesDF.loc[:,cols]
     totals=drawnDF.sum(axis=1)
@@ -394,9 +394,174 @@ def getCardsWithEnoughGames(df, min_sample, prefix="deck_"):
             if df[df[col]>0].shape[0]>min_sample:
                 cards.append(col[len(prefix):])
     return cards
-    
+def deckSizeInfo(conn,set_abbr):
+    #Shows how many decks for a given set have 40, 41, etc. cards in them. Shows win rate for each deck size.
+    #Data is imperfect because deck lists are being determined by game 1 build and not accounting for changes made later.
+    #Not in use. I just made this because I was curious.
+    metadata=MetaData()
+    metadata.reflect(bind=conn)
+    deck_table=metadata.tables[set_abbr+'Decklists']
+    draft_table=metadata.tables[set_abbr+'DraftInfo']
+    s=select(deck_table,draft_table.c.wins,draft_table.c.losses).join(draft_table,deck_table.c.draft_id==draft_table.c.draft_id)
+    deckdf=pd.read_sql_query(s,conn)
+    decksizes=deckdf.iloc[:,4:-2].sum(axis=1)
+    populations=decksizes.value_counts()
+    print(populations)
+    pcts=populations/populations.sum()
+    print(pcts)
+    recordsdf=deckdf.iloc[:,-2:]
+    recordsdf['size']=decksizes
+    wins_and_losses=recordsdf.groupby('size').sum()
+    wins_and_losses['win_rate']=wins_and_losses['wins']/(wins_and_losses['wins']+wins_and_losses['losses'])
+    print(wins_and_losses)    
     
 def winRate(df):
     #df should be a game dataframe
     if df.shape[0]==0: return 0
     else: return df[df['won']==True].shape[0]/df.shape[0]
+
+def cardsInHand(gameDF: pd.DataFrame):
+    #Given a game dataframe, return a dataframe containing the number of copies of each card that are ever in hand each game
+    #The returned dataframe has each row representing a game, an each column is a card.
+    hand_info={}
+    for key in gameDF.keys():
+         if key[:5]=='drawn': 
+            card_name=key[6:]
+            hand_info[card_name]=gameDF[key]+gameDF['opening_hand_'+card_name] #+gameDF['tutored_'+card_name] ltrGameData doesn't have tutored currently
+    handDF=pd.DataFrame(hand_info)
+    return handDF
+
+
+def winSharesTotals(gameDF: pd.DataFrame):
+    #Idea: each card present in a win gets an equal portion of credit for the win (1/total cards seen). Same for losses but negative.
+    #Average this over multiple games by dividing each card's win shares by the number of times it appears.
+    #This should be pretty strongly correlated to GIHWR, without the long game bias.
+    #If every game had exactly N total cards drawn this AvgWS=1/N(2*GIH-1).
+    #The trade off is that this has a bias against card draw spells
+    #as the games where they are cast have more cards seen, and thus lower weight per card, than the ones where they aren't
+    #Given a section of GameData, return total win shares and number of appearances for each card
+    win_loss=np.array(2*gameDF[['won']]-1)
+    handDF=cardsInHand(gameDF)
+    total_cards_seen=handDF.sum(axis=1) #Total number of cards ever in hand for each game
+    total_cards_seen=np.array(total_cards_seen.mask(total_cards_seen==0,1)).reshape(win_loss.shape) #Replacing 0->1 to avoid divide by 0
+    game_weights=np.divide(win_loss,total_cards_seen)
+    hand_totals=handDF.sum(axis=0)
+    hand_matrix=handDF.values
+    ws_matrix=np.matmul(hand_matrix.T,game_weights)
+    ws_totals=pd.Series(data=np.reshape(ws_matrix,-1),index=handDF.keys())
+    return ws_totals, hand_totals
+def winSharesByColors(main_colors, set_abbr='ltr'):
+    #Find win share stats for a specific set of main colors
+    gameDF=getGameDataFrame(main_colors=main_colors,set_abbr=set_abbr)
+    ws_totals, hand_totals=winSharesTotals(gameDF)
+    ws_per_appearance={}
+    for card_name in hand_totals.keys():
+        if hand_totals[card_name]==0:
+            ws_per_appearance[card_name]=0
+        else:
+            ws_per_appearance[card_name]=ws_totals[card_name]/hand_totals[card_name]
+    ws_per_appearance=pd.Series(ws_per_appearance)
+    ws_per_appearance.sort_values(inplace=True)
+    for key in ws_per_appearance.keys():
+        significant=hand_totals[key]>100
+        if significant: print(key,':',ws_per_appearance[key])
+def winSharesOverall(set_abbr='ltr',chunk_size=50000):
+    #Find win share stats for all games played.
+    conn = engine_loc.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine_loc)
+    game_data_table=metadata.tables[set_abbr+'GameData']
+    q_size=select(func.count(1)).select_from(game_data_table)
+    num_games_res=pd.read_sql_query(q_size,conn)
+    num_games=num_games_res.iloc[0,0]
+    q_first_games=select(game_data_table).where(game_data_table.c.index<chunk_size)
+    gameDF1=pd.read_sql_query(q_first_games,conn)
+    ws_totals, hand_totals=winSharesTotals(gameDF1)
+    for i in range(1,num_games//chunk_size+1):
+        start_index=i*chunk_size
+        q_games=select(game_data_table).where(game_data_table.c.index>=start_index,game_data_table.c.index<start_index+chunk_size)
+        gameDF=pd.read_sql_query(q_games,conn)
+        ws_totals_temp, hand_totals_temp=winSharesTotals(gameDF)
+        ws_totals=ws_totals+ws_totals_temp
+        hand_totals=hand_totals+hand_totals_temp
+        print("Counted win shares from", (i+1)*chunk_size, "games")
+    ws_per_appearance={}
+    for card_name in hand_totals.keys():
+        if hand_totals[card_name]==0:
+            ws_per_appearance[card_name]=0
+        else:
+            ws_per_appearance[card_name]=ws_totals[card_name]/hand_totals[card_name]
+    ws_per_appearance=pd.Series(ws_per_appearance)
+    ws_per_appearance.sort_values(inplace=True,ascending=False)
+    for key in ws_per_appearance.keys():
+        significant=hand_totals[key]>100
+        if significant: print(key,':',ws_per_appearance[key])
+
+def gameInHandTotals(gameDF:pd.DataFrame):
+    #gameDF should be a game dataframe
+    #returns total number of games in which each card shows up and how many of those are wins
+    handDF=cardsInHand(gameDF)
+    card_names=handDF.keys()
+    boolHandDF=handDF.gt(0)
+    boolHandDF['won']=gameDF['won']
+    games=(boolHandDF.iloc[:,:-1]).sum(axis=0) #number of games in hand for each card
+    boolHandDF=boolHandDF[boolHandDF['won']==1] #filtering to only look at wins
+    wins=(boolHandDF.iloc[:,:-1]).sum(axis=0) #number of wins where each card appeared
+    totals=pd.DataFrame({'games':games.to_list(),'wins':wins.to_list()},index=card_names)
+    return totals
+
+def gameInHandOverall(set_abbr='ltr', chunk_size=100000):
+    #For each card, gets total number of games and number of wins where that card is ever in hand. 
+    #Returns a dataframe indexed by card name with columns 'games' and 'wins'. 
+    #'games'/'wins' should match 17lands 'GIHWR' stat.
+    #This is unnecessary if I'm going to find all colors separately anyway. May as well just add those together.
+    conn = engine_loc.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine_loc)
+    game_data_table=metadata.tables[set_abbr+'GameData']
+    q_size=select(func.count(1)).select_from(game_data_table)
+    num_games_res=pd.read_sql_query(q_size,conn)
+    num_games=num_games_res.iloc[0,0]
+    q_first_games=select(game_data_table).where(game_data_table.c.index<chunk_size)
+    gameDF1=pd.read_sql_query(q_first_games,conn)
+    totals=gameInHandTotals(gameDF1)
+    for i in range(1,num_games//chunk_size+1):
+        start_index=i*chunk_size
+        q_games=select(game_data_table).where(game_data_table.c.index>=start_index,game_data_table.c.index<start_index+chunk_size)
+        gameDF=pd.read_sql_query(q_games,conn)
+        temp_totals=gameInHandTotals(gameDF)
+        totals=totals+temp_totals
+        print("Counted win shares from", (i+1)*chunk_size, "games")
+    return totals
+def gameInHandByColors(main_colors, set_abbr='ltr')->pd.DataFrame:
+    gameDF=getGameDataFrame(main_colors=main_colors,set_abbr=set_abbr)
+    totals=gameInHandTotals(gameDF)
+    return totals
+
+def gameStartCounts(gameDF: pd.DataFrame):
+    #gameDF should be a game dataframe containing the num_mulligans, on_play, and won columns from GameData
+    #Returns a dataframe of records for each pairing of num_mulligans and on_play values
+    #Games with 3 or more mulligans are grouped together.
+    counts=gameDF[['num_mulligans','on_play','won']].value_counts()
+    recordDF=pd.DataFrame({'num_mulligans':[],'on_play':[],'win_count':[],'game_count':[]})
+    for m in range(3):
+        for p in range(2):
+            wins=0
+            games=0
+            if (m,p,0) in counts.index:
+                games+=counts[m,p,0]
+            if (m,p,1) in counts.index:
+                wins+=counts[m,p,1]
+                games+=counts[m,p,1]
+            recordDF.loc[recordDF.shape[0]]=[m,bool(p),wins,games]
+    for p in range(2):
+        wins3=0
+        games3=0
+        for m in range(3,8):
+                if (m,p,0) in counts.index:
+                    games3+=counts[m,p,0]
+                if (m,p,1) in counts.index:
+                    wins3+=counts[m,p,1]
+                    games3+=counts[m,p,1]
+        recordDF.loc[recordDF.shape[0]]=[3,bool(p),wins3,games3]
+    return recordDF

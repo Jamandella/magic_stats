@@ -1,0 +1,170 @@
+Stat Access Documentation
+
+cardInfo:
+    parameters:
+        set_abbr: str. Three letter set abbreviation.
+        as_json: bool. Defaults to True. Determines whether a json, or pandas Dataframe is returned.
+    output:
+        Returns the entire cardInfo table for the requested set.
+        name: str.
+        mana_value: int. -1 for lands.
+        color: int. A 5 bit integer with the bits representing the presence of each color in WUBRG order. e.g. 1=W, 4=B, 22=10110=UBG
+        card_type: str. The first letter of each of the card's types.
+        rarity: str.
+        Ex:
+        cardInfo('ltr')
+            {"name":{"0":"The One Ring","1":"Banish from Edoras","2":"The Battle of Bywater"....},
+             "mana_value":{"0":4,"1":5,"2":3....},
+             "color":{"0":0,"1":1,"2":1 ....},
+             "card_type":{"0":"A","1":"S","2":"S"...},
+             "rarity":{"0":"M","1":"C","2"...}}
+
+getCardsWithColor
+    parameters:
+        color: str. One of WUBRG or C for colorless
+        include_multicolor: bool. Whether to include multicolor cards that contain the given color. Default True.
+        include_lands: bool. Whether lands count as colorless cards. Default False.
+        as_string: bool. If True, returns card names. If False, returns integer index of the card in cardInfo. Default True
+        set_abbr: str. Three letter set abbreviation.
+        as_json: bool. Defaults to True. Determines whether a json, or pandas Dataframe is returned.
+    output:
+        Returns list of all cards matching the given color
+        Color is determined (in setinfo.py) by mana cost. Could be misleading on some cards like DFCs, adventures, alternate costs, etc.
+        If include_multicolor, get all cards containing that color. Otherwise get cards that are exactly that color.
+        Lands are all marked as colorless. If color='C' and include_lands=True, lands will be included with the colorless cards.
+    Ex:
+    getCardsWithColor('U',include_multicolor=False,set_abbr='ltr')
+        ["Arwen's Gift", 'The Bath Song', 'Bewitching Leechcraft',... ]
+getArchAvgCurve
+    parameters:
+        archLabel: str. Currently main colors in WUBRG form. e.g. 'WB' or 'URG'.
+        set_abbr: str. Three letter set abbreviation.
+    output:
+        Returns mean values of land count and number of cards at each mana value for decks of a given archetype.
+        All cards with mana value 8+ are grouped together.
+    Ex:
+    getArchAvgCurve('WR',set_abbr='ltr')
+        {"lands":16.189081518,"n0_drops":0.0,"n1_drops":2.5445459704,"n2_drops":8.8733627488,
+        "n3_drops":5.4609433809,"n4_drops":3.784016028,"n5_drops":2.0483387185,"n6_drops":1.1408586087,
+        "n7_drops":0.0094268608,"n8p_drops":0.0}
+    WR decks in LTR ran on average 3.78 4 drops and 16.19 lands.
+getArchRecord
+    parameters:
+        archLabel: str. Currently main colors in WUBRG form. e.g. 'WB' or 'URG'. Can also be 'ALL'.
+        set_abbr: str. Three letter set abbreviation.
+    output:
+        For the given archetype, returns number of drafts, games won, games lost,and games played. Also returns overall win rate.
+        average number of wins per draft, and average number of losses per draft.
+    Ex:
+    getArchRecord('BG',set_abbr='ltr')
+        {"num_drafts":11390.0,"num_wins":29353.0,"num_losses":23593.0,"num_games":52946.0,"win_rate":0.554395044}
+    There were 11390 BG decks drafted inthe LTR data. They played 52946 games and won 55.4% of them.
+getCardInDeckWinRates
+    parameters:
+        archLabel: str. Currently main colors in WUBRG form or 'ALL'. Defaults to 'ALL'
+        minCopies: int. Defaults to 1
+        maxCopies: int. Defaults to 40
+        index_by_name: bool. If True, output is indexed by card name. If False, index is int card_id matching cardInfo's index. Default False.
+        set_abbr: str. Three letter set abbreviation.
+        as_json: bool. Defaults to True. Determines whether a json, or pandas Dataframe is returned.
+    output:
+        For each card in the given set, returns number of wins, number of games played, and win rate for decks
+        running at least minCopies and at most maxCopies of that card.
+    Ex:
+    getCardInDeckWinRates(set_abbr='ltr',index_by_name=True)
+        {"wins":{"And\u00faril, Flame of the West":14332,"Aragorn, Company Leader":11726,"Aragorn, the Uniter":4750,...},
+         "games_played":{"And\u00faril, Flame of the West":23602,"Aragorn, Company Leader":22509,"Aragorn, the Uniter":9390,...},
+         "win_rate":{"And\u00faril, Flame of the West":0.6072366749,"Aragorn, Company Leader":0.5209471767,"Aragorn, the Uniter":0.505857295,...}
+         }
+    There were 23602 games played in LTR by decks of any archetype that ran at least one Anduril, Flame of the West.
+    They won 60.7% of those games.
+getRecordByLength
+    parameters:
+        archLabel: str. Currently main colors in WUBRG form. e.g. 'WB' or 'URG'. Can also be 'ALL'.
+        set_abbr: str. Three letter set abbreviation.
+    output:
+        For each game length, returns given archetype's record, win rate, and how frequently games last that long.
+        Each stat is indexed by the number of turns the game lasted.
+        Games of length <=4 are grouped into "4" and >=16 are grouped into "16".
+    Ex:
+    getRecordByLength(archLabel='WR',set_abbr='ltr')
+        {"wins":{"4":873,"5":3249,"6":7419,"7":9812,"8":8995,"9":6697,"10":4532,"11":2738,"12":1652,"13":962,"14":576,"15":356,"16":466},
+        "games":{"4":1447,"5":4652,"6":10852,"7":15688,"8":15806,"9":12859,"10":9290,"11":6122,"12":3888,"13":2311,"14":1385,"15":884,"16":1165},
+        "win_rate":{"4":0.603317208,"5":0.6984092863,"6":0.6836527829,"7":0.6254462009,"8":0.5690876882,"9":0.5208025507,"10":0.4878363832,"11":0.4472394642,"12":0.4248971193,"13":0.416270013,"14":0.4158844765,"15":0.4027149321,"16":0.4},
+        "game_length_rate":{"4":0.0167575768,"5":0.0538743934,"6":0.1256760356,"7":0.1816813165,"8":0.1830478639,"9":0.148918922,"10":0.1075866542,"11":0.0708983312,"12":0.0450265782,"13":0.0267634831,"14":0.0160395604,"15":0.0102375245,"16":0.0134917602}}
+    WR decks in LTR played 10852 games that lasted exactly 6 turns, which was 12.56% of all games they played. They won 68.4% of those games.
+    
+getMetaDistribution
+    parameters:
+        set_abbr: str. Three letter set abbreviation.
+        minRank: int. The minimum rank of drafters to include. Default=0
+        maxRank: int. The maximum rank of drafters to include. Default=6
+    output:
+        For each set of main colors, the number of drafts and proportion of all drafts that are those colors out of drafters with ranks in 
+        the given range.
+    Ex:
+        getMetaDistribution(set_abbr='ltr',minRank=3)
+            {"drafts":{"B":467,"BG":7273,"BR":25756,"BRG":1210,"G":135,"R":200,"RG":3087,"U":249,"UB":17180 ....},
+            "meta_share":{"B":0.0034907275,"BG":0.0543641569,"BR":0.1925207239,"BRG":0.0090444974,"G":0.0010090968,"R":0.0014949583,"RG":0.0230746806,"U":0.001861223,....}}
+        Drafters of rank gold or better in LTR ran BR as their main colors 25756 times which was 19.25% of all drafts in those ranks.
+getCardRecordByCopies 
+    parameters:
+        card_name:str.
+        main_colors: str. Main colors in WUBRG form or 'ALL'. Defaults to 'ALL'
+        set_abbr: str. Three letter set abbreviation.
+    output:
+        Get number of wins, number of games, and win rate for decks of the given colors
+        partitioned by number of copies of the given card. Decks running 4 or more copies of a card are grouped together so 4 means 4+.
+        Note: Currently starts at 1 copy. Would we want to include 0? It's pretty meaningless for 'ALL' but in specific decks could be useful to know.
+    Ex:
+        getCardRecordByCopies(card_name='Birthday Escape',main_colors='UB',set_abbr='ltr')
+            {"wins":{"1":24499,"2":12035,"3":3505,"4":914},
+            "games":{"1":43605,"2":20908,"3":6034,"4":1530},
+            "win_rate":{"1":0.5618392386,"2":0.5756169887,"3":0.5808750414,"4":0.6877351392}}
+        UB decks in LTR that ran 4+ copies of Birthday esacpe won 68.77% fo the 1530 games they played.
+getGameInHandWR
+    parameters:
+        main_colors: str. Main colors in WUBRG form or 'ALL'. Defaults to 'ALL'
+        set_abbr: str. Three letter set abbreviation.
+        as_json: bool. Defaults to True. Determines whether a json, or pandas Dataframe is returned.
+        index_by_name: bool. If True, output is indexed by card name. If False, index is int card_id matching cardInfo's index. Default False.
+    output:
+        Returns game in hand win rate and number of games in hand in decks of the given colors for all cards in the set. 
+        Games in hand is the sample size for this stat.
+    Ex:
+        getGameInHandWR(main_colors='WR',set_abbr='ltr',index_by_name=True)
+            {"games_in_hand":{"And\u00faril, Flame of the West":1001,"Aragorn, Company Leader":257,"Aragorn, the Uniter":219,...},
+            "win_rate":{"And\u00faril, Flame of the West":0.6863136863,"Aragorn, Company Leader":0.5252918288,"Aragorn, the Uniter":0.5479452055,,...}}
+        Out of the 1001 games in which a WR deck ever had an Anduril, Flame of the West in hand in LTR, they won 68.6% of the time.
+getArchWinRatesByMulls
+    parameters:
+        main_colors: str. Main colors in WUBRG form or 'ALL'. Defaults to 'ALL'
+        set_abbr: str. Three letter set abbreviation.
+        as_json: bool. Defaults to True. Determines whether a json, or pandas Dataframe is returned.
+    output:
+        For the given archetype, returns win rates and number of games played on play, draw, and overall by number of mulligans taken.
+        Any game with 3 or more mulligans is grouped into num_mulligans=3.
+    Ex:
+        getArchWinRatesByMulls(main_colors='RG',set_abbr='ltr')
+            {"games_on_play":{"0":9521.0,"1":1354.0,"2":88.0,"3":3.0},
+            "wr_on_play":{"0":0.5807,"1":0.4062,"2":0.3068,"3":0.0},
+            "games_on_draw":{"0":9647.0,"1":1396.0,"2":70.0,"3":5.0},
+            "wr_on_draw":{"0":0.5293,"1":0.4148,"2":0.3143,"3":0.0},
+            "games_total":{"0":19168.0,"1":2750.0,"2":158.0,"3":8.0},
+            "wr_total":{"0":0.5548,"1":0.4105,"2":0.3101,"3":0.0}}
+        RG decks in LTR won 41.05% of all 2750 games that they took exactly 1 mulligan.   
+getPlayDrawSplits
+    parameters:
+        set_abbr: str. Three letter set abbreviation.
+        as_json: bool. Defaults to True. Determines whether a json, or pandas Dataframe is returned.
+    output:
+        For each archetype (i.e. set of main colors currently), returns win rates and number of games played on the play and on the draw.
+    Ex:
+        getPlayDrawSplits(set_abbr='ltr')
+            {"games_on_play":{"ALL":489958.0,"C":0.0,"W":384.0,"U":887.0,"WU":18673.0,"B":1776.0,"WB":51849.0,...},
+            "wr_on_play":{"ALL":0.5805109826,"C":0.0,"W":0.5338541667,"U":0.5738444194,"WU":0.5474214106,"B":0.634009009,"WB":0.5918532662,...},
+            "games_on_draw":{"ALL":490526.0,"C":0.0,"W":392.0,"U":828.0,"WU":18847.0,"B":1819.0,"WB":51652.0,...},
+            "wr_on_draw":{"ALL":0.5312419729,"C":0.0,"W":0.5357142857,"U":0.4879227053,"WU":0.5046426487,"B":0.5953820781,"WB":0.5418183226,...}}
+        In LTR, WU decks played 18847 games going second and one 50.46% of those games.
+getArchAverageWinShares
+    This exists, but I don't like how win shares turned out. Otherwise it's a lot like getGameInHandWR.
