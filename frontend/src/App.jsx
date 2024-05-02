@@ -7,28 +7,35 @@ import {
 
 import {
   RootLayout,
+  SetLayout
 } from "./layouts"
 
-import { loader as setLoader } from "./components/RecentSets";
+import { 
+  setLoader, 
+  setsLoader 
+} from "./loaders";
 
 import {
   About,
   Contact,
+  ErrorPage,
   FAQ, 
   Home,
-} from './pages';
+  SetDetails
+} from "./pages";
 
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route 
       path="/"
       element={<RootLayout />}
-      errorElement={<div>Oops! There was an error.</div>}
+      errorElement={<ErrorPage />}
+      loader={setsLoader}
     >
       <Route 
         index
         element={<Home />}
-        loader={setLoader}
+        loader={setsLoader}
       />
       <Route 
         path="about"
@@ -42,6 +49,16 @@ const router = createBrowserRouter(
         path="faq"
         element={<FAQ />}
       />
+      <Route
+        path="sets"
+        element={<SetLayout />}
+      >
+        <Route 
+          path=":code"
+          element={<SetDetails />}
+          loader={setLoader}
+        />
+      </Route>
     </Route>
   )
 )

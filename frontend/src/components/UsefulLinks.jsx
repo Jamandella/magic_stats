@@ -6,13 +6,13 @@ const links = [
   { name: 'Lucid Chart', url: 'https://lucid.app/lucidchart/002d3ba4-b5e1-44b8-9c6c-3b6e62869340/edit?invitationId=inv_d3a938cc-a15e-49bf-8d0a-d7902a952bda&page=0_0#' },
   { name: '17 Lands', url: 'https://www.17lands.com/' },
   { name: 'Recharts', url: 'https://recharts.org/en-US/' },
-  { name: 'Trello Workspace', url: 'https://trello.com/b/UPAoSil2/magic-stats-are-magical' },
+  { name: 'Trello Workspace', url: 'https://trello.com/b/z2cY9T70/magic-project-tracker' },
 ];
 
 const UsefulLinks = () => {
   return (
-    <div>
-      <h2>Useful Links</h2>
+    <div className="flow">
+      <h2 className="heading-3">Useful Links</h2>
       <ul>
         {links.map(link => (
           <li key={link.name}>

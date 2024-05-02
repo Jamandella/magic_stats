@@ -11,7 +11,6 @@ const Hero = () => {
           <h1 className="visually-hidden">23 Spells</h1>
           <p className="heading-1">MTG Draft Stats Simplified</p>
           <p className="fs-500">Magic: the Gathering draft stats for everyone.</p>
-          <button className="button | box-shadow-3" data-type="primary">Select a set</button>
         </div>
       </div>
       <RecentSets />

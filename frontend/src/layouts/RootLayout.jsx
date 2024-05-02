@@ -1,10 +1,12 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLoaderData } from "react-router-dom";
 import { SiteHeader } from "../components";
 
 const RootLayout = () => {
+  const sets = useLoaderData();
+
   return (
     <div className="root-layout">
-      <SiteHeader />
+      <SiteHeader sets={sets} />
       <main>
         <Outlet />
       </main>

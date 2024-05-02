@@ -19,4 +19,16 @@
       justify-content: $site-header-jusitifcation-large-screens;
     }
   }
+
+  &__brand {
+    a {
+      color: $navigation-color;
+      text-decoration: $navigation-link-text-decoration;
+      font-weight: $navigation-font-weight;
+  
+      &:is(:hover, :focus) {
+        color: $navigation-color-hover;
+      }
+    }
+  }
 }
