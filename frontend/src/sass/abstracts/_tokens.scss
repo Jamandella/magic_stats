@@ -10,7 +10,7 @@ $enable-media-query-dark-mode: false;
 $color-text-default: $color-neutral-800;
 $color-background-default: $color-neutral-200;
 $color-text-interactive-default: $color-accent-400;
-$color-text-interactive-hover: $color-accent-500;
+$color-text-interactive-hover: $color-accent-300;
 
 // set to 0 to disable
 $letter-spacing-loose: 0;
@@ -51,7 +51,7 @@ $body-font-weight: $font-weight-default;
 $body-text-color: $color-text-default;
 $body-background-color: $color-background-default;
 
-$link-color: $color-text-interactive-default;
+$link-color: $color-text-default;
 $link-color-hover: $color-text-interactive-hover;
 
 $heading-font-family: $font-family-accent;
@@ -81,7 +81,7 @@ $container-max-width-narrow: 40rem;
 $container-max-width-wide: 75rem;
 
 // site header
-$site-header-background-color: $color-neutral-300;
+$site-header-background-color: $color-primary-500;
 $site-header-color: $color-neutral-900;
 $site-header-padding: $fluid-size-s 0;
 $site-header-margin: 0;
@@ -91,7 +91,7 @@ $site-header-alignment: center;
 
 // navigation
 $navigation-color: $site-header-color;
-$navigation-color-hover: $color-primary-300;
+$navigation-color-hover: $color-accent-400;
 $navigation-font-size: $font-size-400;
 $navigation-gap: $fluid-size-m;
 $navigation-link-text-decoration: none;

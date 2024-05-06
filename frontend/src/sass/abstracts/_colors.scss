@@ -1,121 +1,110 @@
-// my colors
-$slate: hsl(235, 20%, 14%);
-$skyblue: hsl(187, 65%, 64%);
-$color: hsl(240, 29%, 9.5%);
-
 // global color tokens
 $-clr-white: hsl(0 0% 100%);
-$-clr-gray-100: hsl(0 0% 95%);
-$-clr-gray-200: hsl(0 0% 82.5%);
-$-clr-gray-300: hsl(0 0% 70%);
-$-clr-gray-400: hsl(0 0% 60%);
-$-clr-gray-500: hsl(0 0% 50%);
-$-clr-gray-600: hsl(0 0% 40%);
-$-clr-gray-700: hsl(0 0% 30%);
-$-clr-gray-800: hsl(0 0% 17.5%);
-$-clr-gray-900: hsl(0 0% 7.5%);
 $-clr-black: hsl(0 0% 0%);
-$-clr-slate-100: hsl(235, 20%, 95%);
-$-clr-slate-200: hsl(235, 20%, 82.5%);
-$-clr-slate-300: hsl(235, 20%, 70%);
-$-clr-slate-400: hsl(235, 20%, 60%);
-$-clr-slate-500: hsl(235, 20%, 50%);
-$-clr-slate-600: hsl(235, 20%, 35%);
-$-clr-slate-700: hsl(235, 20%, 28%);
-$-clr-slate-800: hsl(235, 20%, 15%);
-$-clr-slate-900: hsl(235, 20%, 7.5%);
-$-clr-skyblue-100: hsl(187, 65%, 95%);
-$-clr-skyblue-200: hsl(187, 65%, 82.5%);
-$-clr-skyblue-300: hsl(187, 65%, 70%);
-$-clr-skyblue-400: hsl(187, 65%, 60%);
-$-clr-skyblue-500: hsl(187, 65%, 50%);
-$-clr-skyblue-600: hsl(187, 65%, 40%);
-$-clr-skyblue-700: hsl(187, 65%, 30%);
-$-clr-skyblue-800: hsl(187, 65%, 17.5%);
-$-clr-skyblue-900: hsl(187, 65%, 7.5%);
-$-clr-deeppink-100: hsl(336 75% 95%);
-$-clr-deeppink-200: hsl(336 75% 82.5%);
-$-clr-deeppink-300: hsl(336 75% 70%);
-$-clr-deeppink-400: hsl(336 75% 60%);
-$-clr-deeppink-500: hsl(336 75% 50%);
-$-clr-deeppink-600: hsl(336 75% 40%);
-$-clr-deeppink-700: hsl(336 75% 30%);
-$-clr-deeppink-800: hsl(336 75% 17.5%);
-$-clr-deeppink-900: hsl(336 75% 7.5%);
+
+$-clr-blue-100:hsl(240, 58%, 90%);
+$-clr-blue-200:hsl(240, 58%, 82.5%);
+$-clr-blue-300:hsl(240, 58%, 70%);
+$-clr-blue-400:hsl(240, 58%, 60%);
+$-clr-blue-500:hsl(240, 58%, 50%);
+$-clr-blue-600:hsl(240, 58%, 40%);
+$-clr-blue-700:hsl(240, 58%, 30%);
+$-clr-blue-800:hsl(240, 58%, 17.5%);
+$-clr-blue-900:hsl(240, 58%, 7.5%);
+
+$-clr-gray-100: hsl(210, 11%, 95%);
+$-clr-gray-200: hsl(210, 11%, 82.5%);
+$-clr-gray-300: hsl(210, 11%, 70%);
+$-clr-gray-400: hsl(210, 11%, 60%);
+$-clr-gray-500: hsl(210, 11%, 50%);
+$-clr-gray-600: hsl(210, 11%, 40%);
+$-clr-gray-700: hsl(210, 11%, 30%);
+$-clr-gray-800: hsl(210, 11%, 17.5%);
+$-clr-gray-900: hsl(210, 11%, 10%);
+
+$-clr-green-100: hsl(144, 65%, 90%);
+$-clr-green-200: hsl(144, 65%, 80%);
+$-clr-green-300: hsl(144, 65%, 70%);
+$-clr-green-400: hsl(144, 65%, 65%);
+$-clr-green-500: hsl(144, 65%, 50%);
+$-clr-green-600: hsl(144, 65%, 40%);
+$-clr-green-700: hsl(144, 65%, 30%);
+$-clr-green-800: hsl(144, 65%, 17.5%);
+$-clr-green-900: hsl(144, 65%, 7.5%);
 
 $light: (
   "neutral": (
     "000": $-clr-white,
-    "100": $-clr-slate-100,
-    "200": $-clr-slate-200,
-    "300": $-clr-slate-300,
-    "400": $-clr-slate-400,
-    "500": $-clr-slate-500,
-    "600": $-clr-slate-600,
-    "700": $-clr-slate-700,
-    "800": $-clr-slate-800,
-    "900": $-clr-slate-900,
+    "100": $-clr-gray-100,
+    "200": $-clr-gray-200,
+    "300": $-clr-gray-300,
+    "400": $-clr-gray-400,
+    "500": $-clr-gray-500,
+    "600": $-clr-gray-600,
+    "700": $-clr-gray-700,
+    "800": $-clr-gray-800,
+    "900": $-clr-gray-900,
     "1000": $-clr-black,
   ),
   "accent": (
-    "100": $-clr-deeppink-100,
-    "200": $-clr-deeppink-200,
-    "300": $-clr-deeppink-300,
-    "400": $-clr-deeppink-400,
-    "500": $-clr-deeppink-500,
-    "600": $-clr-deeppink-600,
-    "700": $-clr-deeppink-700,
-    "800": $-clr-deeppink-800,
-    "900": $-clr-deeppink-900,
+    "100": $-clr-green-100,
+    "200": $-clr-green-200,
+    "300": $-clr-green-300,
+    "400": $-clr-green-400,
+    "500": $-clr-green-500,
+    "600": $-clr-green-600,
+    "700": $-clr-green-700,
+    "800": $-clr-green-800,
+    "900": $-clr-green-900,
   ),
   "primary": (
-    "100": $-clr-skyblue-100,
-    "200": $-clr-skyblue-200,
-    "300": $-clr-skyblue-300,
-    "400": $-clr-skyblue-400,
-    "500": $-clr-skyblue-500,
-    "600": $-clr-skyblue-600,
-    "700": $-clr-skyblue-700,
-    "800": $-clr-skyblue-800,
-    "900": $-clr-skyblue-900,
+    "100": $-clr-blue-100,
+    "200": $-clr-blue-200,
+    "300": $-clr-blue-300,
+    "400": $-clr-blue-400,
+    "500": $-clr-blue-500,
+    "600": $-clr-blue-600,
+    "700": $-clr-blue-700,
+    "800": $-clr-blue-800,
+    "900": $-clr-blue-900,
   ),
 );
 
 $dark: (
   "neutral": (
     "1000": $-clr-white,
-    "900": $-clr-slate-100,
-    "800": $-clr-slate-200,
-    "700": $-clr-slate-300,
-    "600": $-clr-slate-400,
-    "500": $-clr-slate-500,
-    "400": $-clr-slate-600,
-    "300": $-clr-slate-700,
-    "200": $-clr-slate-800,
-    "100": $-clr-slate-900,
+    "900": $-clr-gray-100,
+    "800": $-clr-gray-200,
+    "700": $-clr-gray-300,
+    "600": $-clr-gray-400,
+    "500": $-clr-gray-500,
+    "400": $-clr-gray-600,
+    "300": $-clr-gray-700,
+    "200": $-clr-gray-800,
+    "100": $-clr-gray-900,
     "000": $-clr-black,
   ),
   "accent": (
-    "900": $-clr-deeppink-900,
-    "800": $-clr-deeppink-800,
-    "700": $-clr-deeppink-700,
-    "600": $-clr-deeppink-600,
-    "500": $-clr-deeppink-500,
-    "400": $-clr-deeppink-400,
-    "300": $-clr-deeppink-300,
-    "200": $-clr-deeppink-200,
-    "100": $-clr-deeppink-100,
+    "900": $-clr-green-900,
+    "800": $-clr-green-800,
+    "700": $-clr-green-700,
+    "600": $-clr-green-600,
+    "500": $-clr-green-500,
+    "400": $-clr-green-400,
+    "300": $-clr-green-300,
+    "200": $-clr-green-200,
+    "100": $-clr-green-100,
   ),
   "primary": (
-    "900": $-clr-skyblue-900,
-    "800": $-clr-skyblue-800,
-    "700": $-clr-skyblue-700,
-    "600": $-clr-skyblue-600,
-    "500": $-clr-skyblue-500,
-    "400": $-clr-skyblue-400,
-    "300": $-clr-skyblue-300,
-    "200": $-clr-skyblue-200,
-    "100": $-clr-skyblue-100,
+    "900": $-clr-blue-900,
+    "800": $-clr-blue-800,
+    "700": $-clr-blue-700,
+    "600": $-clr-blue-600,
+    "500": $-clr-blue-500,
+    "400": $-clr-blue-400,
+    "300": $-clr-blue-300,
+    "200": $-clr-blue-200,
+    "100": $-clr-blue-100,
   ),
 );
 

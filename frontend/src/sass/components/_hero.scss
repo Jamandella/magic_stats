@@ -4,8 +4,6 @@
   overflow: clip;
   min-height: 100vh;
 
-  @include linear-gradient(180deg, $color-neutral-100, $color-neutral-400);
-
   &__intro {
     display: grid;
     gap: var(--grid-gap, $grid-gap);
