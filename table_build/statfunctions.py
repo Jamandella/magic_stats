@@ -189,7 +189,7 @@ def getCardsWithColor(conn, color, set_abbr='ltr',include_multicolor=True, inclu
 
 def getGameDataFrame(main_colors, set_abbr='ltr'): 
     #returns the data gamedata rows of all games fitting the given criteria as a dataframe
-    #trade off of using too much memory vs reading the raw data too many times which is slow
+    #slow to read from the from the game data table. (takes 10-50s typically) 
     conn = engine_loc.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine_loc)
@@ -199,7 +199,17 @@ def getGameDataFrame(main_colors, set_abbr='ltr'):
     conn.close()
     return df
 
-
+def getGamesByID(draft_ids: list, set_abbr='ltr')->pd.DataFrame:
+    #given a list of draft_id values, get all games from those drafts. 
+    #Can be used to get archetype specific stats after clustering
+    conn = engine_loc.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine_loc)
+    game_data_table=metadata.tables[set_abbr+'GameData']
+    q=select(game_data_table).where(game_data_table.c.draft_id.in_(draft_ids))
+    df=pd.read_sql_query(q,conn)
+    conn.close()
+    return df
 
 def countCurve(gamesdf,carddf):
     #given a dataframe of games, returns total number of cards of each MV in those games
@@ -427,7 +437,7 @@ def cardsInHand(gameDF: pd.DataFrame):
     for key in gameDF.keys():
          if key[:5]=='drawn': 
             card_name=key[6:]
-            hand_info[card_name]=gameDF[key]+gameDF['opening_hand_'+card_name] #+gameDF['tutored_'+card_name] ltrGameData doesn't have tutored currently
+            hand_info[card_name]=gameDF[key]+gameDF['opening_hand_'+card_name]+gameDF['tutored_'+card_name] #ltrGameData doesn't have tutored currently
     handDF=pd.DataFrame(hand_info)
     return handDF
 
@@ -467,6 +477,7 @@ def winSharesByColors(main_colors, set_abbr='ltr'):
         if significant: print(key,':',ws_per_appearance[key])
 def winSharesOverall(set_abbr='ltr',chunk_size=50000):
     #Find win share stats for all games played.
+    #Defunct. Win shares don't appear to be a valuable stat.
     conn = engine_loc.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine_loc)
@@ -497,16 +508,23 @@ def winSharesOverall(set_abbr='ltr',chunk_size=50000):
         significant=hand_totals[key]>100
         if significant: print(key,':',ws_per_appearance[key])
 
-def gameInHandTotals(gameDF:pd.DataFrame):
+def gameInHandTotals(gameDF:pd.DataFrame,scale_by_copies=True):
     #gameDF should be a game dataframe
     #returns total number of games in which each card shows up and how many of those are wins
+    #Should a game with multiple copies of a card drawn count as multiple games in hand? Leaning yes.
     handDF=cardsInHand(gameDF)
     card_names=handDF.keys()
-    boolHandDF=handDF.gt(0)
-    boolHandDF['won']=gameDF['won']
-    games=(boolHandDF.iloc[:,:-1]).sum(axis=0) #number of games in hand for each card
-    boolHandDF=boolHandDF[boolHandDF['won']==1] #filtering to only look at wins
-    wins=(boolHandDF.iloc[:,:-1]).sum(axis=0) #number of wins where each card appeared
+    if scale_by_copies:
+        handDF['won']=gameDF['won']
+        games=(handDF.iloc[:,:-1]).sum(axis=0) #number of games in hand for each card
+        handDF=handDF[handDF['won']==1] #filtering to only look at wins
+        wins=(handDF.iloc[:,:-1]).sum(axis=0) #number of wins where each card appeared
+    else:
+        boolHandDF=handDF.gt(0)
+        boolHandDF['won']=gameDF['won']
+        games=(boolHandDF.iloc[:,:-1]).sum(axis=0) #number of games in hand for each card
+        boolHandDF=boolHandDF[boolHandDF['won']==1] #filtering to only look at wins
+        wins=(boolHandDF.iloc[:,:-1]).sum(axis=0) #number of wins where each card appeared
     totals=pd.DataFrame({'games':games.to_list(),'wins':wins.to_list()},index=card_names)
     return totals
 
