@@ -19,7 +19,7 @@ import {
   About,
   Contact,
   ErrorPage,
-  FAQ, 
+  Glossary, 
   Home,
   SetDetails
 } from "./pages";
@@ -46,8 +46,8 @@ const router = createBrowserRouter(
         element={<Contact />}
       />
       <Route 
-        path="faq"
-        element={<FAQ />}
+        path="glossary"
+        element={<Glossary />}
       />
       <Route
         path="sets"
