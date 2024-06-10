@@ -3,6 +3,10 @@ import Dropdown from './Dropdown';
 
 const navLinks = [
   {
+    name: 'Glossary',
+    url: '/glossary'
+  },
+  {
     name: 'About',
     url: '/about'
   },
@@ -10,10 +14,6 @@ const navLinks = [
     name: 'Contact',
     url: '/contact'
   },
-  {
-    name: 'FAQ',
-    url: '/faq'
-  }
 ];
 
 const SiteHeader = ({ sets }) => {
