@@ -2,12 +2,12 @@
 
 import pandas as pd
 from sqlalchemy import MetaData, select, create_engine, func
-from dbpgstrings import host, database, user, password 
-engine=create_engine(url="postgresql://{0}:{1}@{2}:{3}/{4}".format(
-    user, password, host, 5432, database))  
-
-
-def cardInfo(set_abbr='ltr',as_json=True):
+import os
+from dotenv import load_dotenv
+load_dotenv()
+db_url=os.getenv("DB_URL")
+engine=create_engine(url=db_url)  
+def cardInfo(set_abbr:str,as_json=True):
     #Returns the full card info table for the given set. Defaults to returning a pandas dataframe, with an option for json instead.
     conn = engine.connect()
     metadata = MetaData()
@@ -19,7 +19,8 @@ def cardInfo(set_abbr='ltr',as_json=True):
     if as_json:return df.to_json()
     else: return df
 
-def getCardsWithColor(color, set_abbr='ltr',include_multicolor=True, include_lands=False, as_string=True):
+
+def getCardsWithColor(set_abbr:str,color:str,include_multicolor=True, include_lands=False, as_string=True):
     #Returns list of all cards matching the given color
     #If as_string=True gives their names, otherwise gives their integer index in cardInfo
     #Color is determined (in setinfo.py) by mana cost. Could be misleading on some cards like DFCs, adventures, alternate costs, etc.
@@ -49,7 +50,7 @@ def getCardsWithColor(color, set_abbr='ltr',include_multicolor=True, include_lan
         cards=carddf.loc[colorfilter].index.to_list()
     return cards
 
-def getArchAvgCurve(archLabel, set_abbr='ltr'):
+def getArchAvgCurve(set_abbr:str, archLabel:str):
     #returns mean values of lands and each n drop for given archetype
     #Currently, archLabel is just colors in string form, e.g. 'G', or 'UB'. All colors are listed in WUBRG order.
     conn = engine.connect()
@@ -69,7 +70,7 @@ def getArchAvgCurve(archLabel, set_abbr='ltr'):
         return avgs.to_json()
     else: #Should be all 0's in this case.
         return dfTotal.iloc[1:].to_json()
-def getArchRecord(archLabel,set_abbr='ltr'):
+def getArchRecord(set_abbr:str, archLabel:str):
     #returns a a given deck's total wins, losses, drafts, win percentage, and average record per draft. wins/(wins+losses) for deck's overall win rate. 
     conn = engine.connect()
     metadata = MetaData()
@@ -83,7 +84,7 @@ def getArchRecord(archLabel,set_abbr='ltr'):
     #df['significant_sample']=df['num_games']>500
     result=pd.Series(data=df.loc[0])
     return result.to_json()
-def getCardInDeckWinRates(archLabel='ALL', minCopies=1, maxCopies=40, set_abbr='ltr', index_by_name=False,as_json=True): 
+def getCardInDeckWinRates(set_abbr:str,archLabel='ALL', minCopies=1, maxCopies=40,index_by_name=False,as_json=True): 
 #Returns game played win rates for all cards, indexed by their numerical id from CardInfo table. Can be restricted to specific decks.
 #Can also require a specific range of copies of each card.
     conn = engine.connect()
@@ -117,7 +118,7 @@ def getCardInDeckWinRates(archLabel='ALL', minCopies=1, maxCopies=40, set_abbr='
     if as_json: return df.to_json()
     else: return df
 
-def getRecordByLength(archLabel:str,set_abbr='ltr'):
+def getRecordByLength(set_abbr:str, archLabel:str,):
     #For each game length (by number of turns), returns given archetype's record, win rate, and how frequently games last that long.
     #Games of length <=4 and >=16 are grouped together
     MINTURNS=4
@@ -170,7 +171,7 @@ def getRecordByLength(archLabel:str,set_abbr='ltr'):
     #outputDF['significant_sample']=outputDF['games']>500
     return outputDF.to_json()
 
-def getMetaDistribution(set_abbr='ltr', minRank=0,maxRank=6):
+def getMetaDistribution(set_abbr:str, minRank=0,maxRank=6):
     #Gets number of drafts for each set of main colors. Can be filtered by rank to show the metagame at user's level.
     conn = engine.connect()
     metadata = MetaData()
@@ -189,7 +190,7 @@ def getMetaDistribution(set_abbr='ltr', minRank=0,maxRank=6):
     df['meta_share']=df['drafts']/total_drafts
     return df.to_json()
 
-def getCardRecordByCopies(card_name:str, main_colors='ALL', set_abbr='ltr'):
+def getCardRecordByCopies(set_abbr:str, card_name:str, main_colors='ALL', ):
     #Gets number of wins, games played, and win rate for a given card split up by number of copies of that card in the deck
     #For example "4":{"wins":859.0,"games":1414.0,"win_rate":0.6074964639}
     conn = engine.connect()
@@ -212,7 +213,7 @@ def getCardRecordByCopies(card_name:str, main_colors='ALL', set_abbr='ltr'):
     df['win_rate']=df['wins']/tempgames
     #df['significant_sample']=df['games']>500
     return df.to_json()
-def getGameInHandWR(main_colors='ALL',set_abbr='ltr', as_json=True,index_by_name=False):
+def getGameInHandWR(set_abbr:str, main_colors='ALL', as_json=True,index_by_name=False):
     #Returns game in hand win rate for all cards in the given set. May be filtered by archetype, or 'ALL' to count all games.
     #Includes both win rate and number of games in hand, which is the sample size.
     #Cards are labeled by their id in the CardInfo table, unless index_by_name=True, then they use their card names
@@ -240,7 +241,7 @@ def getGameInHandWR(main_colors='ALL',set_abbr='ltr', as_json=True,index_by_name
     resultDF.sort_index(inplace=True)
     if as_json: return resultDF.to_json()
     else: return resultDF
-def getAverageWinShares(main_colors='ALL',set_abbr='ltr',as_json=True,index_by_name=False):
+def getAverageWinShares(set_abbr:str,main_colors='ALL',as_json=True,index_by_name=False):
     #Returns average win shares per appearance for all cards in the given set. May be filtered by archetype, or 'ALL' to count all games.
     #Includes both win shares and number of games in hand, which is the sample size.
     #Cards are labeled by their id in the CardInfo table
@@ -265,7 +266,7 @@ def getAverageWinShares(main_colors='ALL',set_abbr='ltr',as_json=True,index_by_n
     if as_json: return resultDF.to_json()
     else: return resultDF
 
-def getArchWinRatesByMulls(main_colors='ALL',set_abbr='ltr', as_json=True):
+def getArchWinRatesByMulls(set_abbr:str,main_colors='ALL', as_json=True):
     #Returns win rates and number of games played on play, draw, and overall by number of mulligans taken.
     #Any game with 3 or more mulligans is grouped into num_mulligans=3.
     #If main_colors='ALL', returns cumulative records where games for all archetypes are included
@@ -293,7 +294,7 @@ def getArchWinRatesByMulls(main_colors='ALL',set_abbr='ltr', as_json=True):
         outputDF.loc[mulls]=[int(games_on_play),wr_on_play,int(games_on_draw),wr_on_draw,int(games_total),wr_total]
     if as_json: return outputDF.to_json()
     else: return outputDF
-def getPlayDrawSplits(set_abbr='ltr', as_json=True):
+def getPlayDrawSplits(set_abbr:str, as_json=True):
     #Returns number of games played and win rate on the play and on the draw for each archetype
     conn = engine.connect()
     metadata = MetaData()
@@ -317,5 +318,3 @@ def getPlayDrawSplits(set_abbr='ltr', as_json=True):
         outputDF.loc[archLabel]=[games_on_play,wr_on_play,games_on_draw,wr_on_draw]
     if as_json: return outputDF.to_json()
     else: return resultDF
-
-print(getPlayDrawSplits(set_abbr='ltr'))
