@@ -5,19 +5,16 @@ from sqlalchemy.orm import mapped_column, DeclarativeBase
 from statfunctions import *
 from processdraftdata import *
 from setinfo import scrape_scryfall
-import time
 import os
 from dotenv import load_dotenv
 from clustermaking import *
 load_dotenv()
 db_url=os.getenv("DB_URL")
-set_abbr='dmu' #This determines which set we are working with. Current options: ltr, dmu, bro, mkm
-engine1 = create_engine("sqlite:///23spells.db", echo=False) #used to build tables locally. use only for GameData.
-conn1 = engine1.connect()
+set_abbr='one' #This determines which set we are working with. Current options: ltr, dmu, bro, mkm, one
 port='5432'
-engine2=create_engine(url=db_url) 
-conn2=engine2.connect()
-metadata = MetaData()
+engine=create_engine(url=db_url) 
+conn=engine.connect()
+#metadata = MetaData()
 
 # Table Definitions
 class Base(DeclarativeBase):
@@ -27,20 +24,19 @@ class Base(DeclarativeBase):
 class Archetypes(Base):
     __tablename__=set_abbr+"Archetypes"
     id=mapped_column(SmallInteger, primary_key=True)
-    archLabel=mapped_column(String)
+    arch_label=mapped_column(String)
     num_drafts=mapped_column(Integer)
     num_wins=mapped_column(Integer)
     num_losses=mapped_column(Integer)
     #id: For id<32, id encodes main colors by W=1, U=2, B=4, R=8, G=16, e.g. 17=10001=WG.
     #For id>=32, id%32 encodes color as above and int(id/32) is subarchetype number, e.g. 81=32*2+17=WG2
-    #archLabel=main colors for id<32, and main colors with a number appended for subarchetypes.
+    #arch_label=main colors for id<32, and main colors with a number appended for subarchetypes.
         #e.g. 'WG' refers to all decks that have white and green as their main colors. 
         #'WG1', 'WG2', and 'WG3' would be the three archetypes within those colors.
     #num_drafts=number of drafts recorded for this archetype
     #num_wins / losses = total games won/lost recorded for this archetype
-    #id=-1 has archLabel='ALL' and has cumulative data for the entire set.
+    #id=-1 has arch_label='ALL' and has cumulative data for the entire set.
     
-
 class CardInfo(Base):
     #The information describing each card in the set
     __tablename__=set_abbr+"CardInfo"
@@ -77,7 +73,6 @@ class DraftInfo(Base):
     arch_id: SmallInteger, 
     CARDNAME: SmallInteger, one of these for every card in given set, number of copies of CARDNAME in this deck
 """
-
 class ArchGameStats(Base):
     #For each archetype and length of game (by turns), there is a row for wins and a row for losses
     #In these rows the recorded data is the number of games and the total number of cards of each mana value
@@ -85,7 +80,7 @@ class ArchGameStats(Base):
     #For example: in the row for arch_id=6 (UB), turns=8, won=True, 
     #n2_drops/game_count would correspond to the average number of 2 drops in UB decks that won a game in 8 turns.
     __tablename__=set_abbr+"ArchGameStats"
-    arch_id=mapped_column(SmallInteger, ForeignKey(set_abbr+'Archetypes.id',ondelete='CASCADE'),primary_key=True) 
+    arch_id=mapped_column(SmallInteger, ForeignKey(set_abbr+'Archetypes.id'),primary_key=True) 
     won=mapped_column(Boolean, primary_key=True)
     turns=mapped_column(SmallInteger, primary_key=True) #how long the game lasted
     game_count=mapped_column(Integer) #number of games that fit the preceding criteria
@@ -117,6 +112,7 @@ class CardGameStats(Base):
     __tablename__=set_abbr+"CardGameStats"
     id=mapped_column(SmallInteger, ForeignKey(set_abbr+'CardInfo.id',ondelete='CASCADE'), primary_key=True)
     arch_id=mapped_column(SmallInteger, ForeignKey(set_abbr+'Archetypes.id',ondelete='CASCADE'), primary_key=True)
+    #arch_id=mapped_column(SmallInteger, primary_key=True)
     copies=mapped_column(SmallInteger, primary_key=True)
     win_count=mapped_column(Integer)
     game_count=mapped_column(Integer)
@@ -126,6 +122,7 @@ class CardGameStats(Base):
 class CardDerivedStats(Base):
     __tablename__=set_abbr+"CardDerivedStats"
     arch_id=mapped_column(SmallInteger, ForeignKey(set_abbr+'Archetypes.id'), primary_key=True)
+    #arch_id=mapped_column(SmallInteger, primary_key=True)
     card_id=mapped_column(SmallInteger, ForeignKey(set_abbr+'CardInfo.id',ondelete='CASCADE'), primary_key=True)
     games_in_hand=mapped_column(Integer,nullable=True)
     wins_in_hand=mapped_column(Integer,nullable=True)
@@ -144,6 +141,7 @@ class CardDerivedStats(Base):
 class ArchStartStats(Base):
     __tablename__=set_abbr+"ArchStartStats"
     arch_id=mapped_column(SmallInteger, ForeignKey(set_abbr+'Archetypes.id'), primary_key=True)
+    #arch_id=mapped_column(SmallInteger, primary_key=True)
     num_mulligans=mapped_column(SmallInteger, primary_key=True)
     on_play=mapped_column(Boolean, primary_key=True)
     win_count=mapped_column(Integer)
@@ -158,7 +156,7 @@ class ArchStartStats(Base):
     #would mean that WU decks that didn't mulligan and went first won 1000 of the 1800 games they played.
 
 #Table Building
-def createDecklists(conn): 
+def createDecklists(): 
     tableName=set_abbr+'Decklists'
     Base.metadata.reflect(bind=conn)
     if tableName in Base.metadata.tables.keys():
@@ -170,12 +168,14 @@ def createDecklists(conn):
         Base.metadata.reflect(bind=conn)
     carddf=cardInfo(conn=conn,set_abbr=set_abbr)
     cols=[Column('deck_id',Integer, primary_key=True),
-          Column('draft_id',String),
+          Column('draft_id',String, ForeignKey(set_abbr+'DraftInfo.draft_id', ondelete='CASCADE')),
+          #Column('draft_id',String),
           Column('draft_time', DateTime),
           Column('rank', SmallInteger),
           Column('wins',SmallInteger),
           Column('games',SmallInteger),
           Column('main_colors',String),
+          #Column('arch_id', SmallInteger)] #ForeignKey causes an error I can't explain and is a negligible optimization
           Column('arch_id', SmallInteger, ForeignKey(set_abbr+'Archetypes.id'))]
     for name in carddf['name'].tolist():
         cols.append(Column(name,SmallInteger))
@@ -198,55 +198,26 @@ def makeDecklistSection(draftGameDF:pd.DataFrame,start_index:int,main_colors:str
     sectionDF=sectionDF[new_col_order]
     return sectionDF
 
-
-
-def populateArchetypes(conn):
+def populateArchetypes():
     arcs=['C','W','U','WU','B','WB','UB','WUB','R','WR','UR','WUR','BR','WBR','UBR','WUBR','G',
           'WG','UG','WUG','BG','WBG','UBG','WUBG','RG','WRG','URG','WURG','BRG','WBRG','UBRG','WUBRG'] 
-    df=pd.DataFrame({'id':[],'archLabel':[],'num_drafts':[],'num_wins':[],'num_losses':[]})
+    df=pd.DataFrame({'id':[],'arch_label':[],'num_drafts':[],'num_wins':[],'num_losses':[]})
     for i in range(len(arcs)):
         df.loc[i]=(i, arcs[i], 0, 0, 0) 
     df.loc[df.shape[0]]=(-1, 'ALL', 0, 0, 0) 
     df.to_sql(set_abbr+'Archetypes',conn, index=False, if_exists='append')
     conn.commit()
 
-
-def populateCardTable(conn):
+def populateCardTable():
     df=pd.DataFrame.from_dict(scrape_scryfall(set_abbr=set_abbr),orient='index')
     df.columns=['name','mana_value','color','card_type','rarity']
     df['id']=df.index
     df.sort_index(inplace=True)
-    #df.to_sql(set_abbr+'CardInfo',conn, if_exists='replace',index=False)
     df.to_sql(set_abbr+'CardInfo',conn, if_exists='append',index=False)
     conn.commit()
         
-def populateDraftInfo(conn):
-    draft_table=Base.metadata.tables[set_abbr+'DraftInfo']
-    d=draft_table.delete()
-    conn.execute(d)
-    conn.commit()
-    chunksize=45*42*5
-    draftdf=pd.DataFrame({'draft_id':[],'draft_time':[], 'rank':[], 'event_match_wins':[],'event_match_losses':[]})
-    address=r".\draft_data_public."+set_abbr.upper()+".PremierDraft.csv"
-    print("Started reading draft csv")
-    progresscount=0
-    t0=time.time()
-    for chunk in pd.read_csv(address,chunksize=chunksize):
-        df = pd.DataFrame(chunk)
-        progresscount+=1
-        dfp1p1=df[df['pack_number']+df['pick_number']==0]
-        draftdf=pd.concat([draftdf,dfp1p1[['draft_id','draft_time','rank','event_match_wins','event_match_losses']]],axis=0)
-        if progresscount%50==0:
-             print("Processed {} lines in {} total seconds".format((progresscount*chunksize),round(time.time()-t0,3)))
-    shorter_names={'event_match_wins':'wins','event_match_losses':'losses'}
-    draftdf['rank']=draftdf['rank'].apply(lambda x: rankToNum(x))
-    draftdf.rename(columns=shorter_names,inplace=True)
-    draftdf.to_sql(set_abbr+'DraftInfo',con=conn,if_exists='append',index_label='draft_id',index=False)
-    conn.commit()
-    t2=time.time()
-    print("Built draft table in ",round(t2-t0,3))
 
-def insertColorToArchGames(colorDF:pd.DataFrame,cardDF:pd.DataFrame,color_id:int,ag_name:str, conn):
+def insertColorToArchGames(colorDF:pd.DataFrame,cardDF:pd.DataFrame,color_id:int,ag_name:str):
     insertdf=pd.DataFrame({ 'arch_id': [],'won': [],'turns': [],'game_count': [],
                                'lands': [],'n0_drops': [], 'n1_drops': [],
                                 'n2_drops': [], 'n3_drops': [], 'n4_drops': [],
@@ -266,53 +237,16 @@ def insertColorToArchGames(colorDF:pd.DataFrame,cardDF:pd.DataFrame,color_id:int
                                             curve[8]]
     insertdf.to_sql(ag_name,conn,if_exists='append',index=False)
 
-def insertColorToArchStarts(colorGamesDF:pd.DataFrame,color_id:int, table_name:str,conn):
+def insertColorToArchStarts(colorGamesDF:pd.DataFrame,color_id:int, table_name:str):
     recordDF=gameStartCounts(colorGamesDF)
     recordDF['arch_id']=pd.Series([color_id]*recordDF.shape[0])
     column_order=['arch_id','num_mulligans','on_play','win_count','game_count']
     recordDF=recordDF[column_order]
     recordDF.to_sql(table_name,con=conn,index=False,if_exists='append')
     return recordDF
-def populateCardGameTable(conn):
-    cg_table_name=set_abbr+'CardGameStats'
-    cg_table=Base.metadata.tables[cg_table_name]
-    arch_table=Base.metadata.tables[set_abbr+'Archetypes']
-    q1=select(arch_table.c.id,arch_table.c.archLabel)
-    archDF=pd.read_sql_query(q1,conn,index_col='id')
-    cardDF=cardInfo(conn=conn,set_abbr=set_abbr)
-    t0=time.time()
-    for arch_id in archDF.index:
-        main_colors=archDF.at[arch_id,'archLabel'] #Will need to be adapted when more archetypes exist
-        df=getGameDataFrame(main_colors=main_colors,set_abbr=set_abbr)
-        print("Counting cards in {} decks".format(main_colors))
-        insertdf=pd.DataFrame({'id':[],'arch_id':[],'copies':[],'win_count':[], 'game_count':[]})
-        for n in cardDF.index:
-            card=cardDF.at[n,'name']
-            card_id=n
-            col='deck_'+card 
-            partialdf=pd.DataFrame({'id':[],'arch_id':[],'copies':[],'win_count':[], 'game_count':[]})
-            partialdf.set_index('copies')
-            valdf=df[[col,'won']].value_counts() 
-            #^This makes valdf a series which is indexed by number of copies of the given card and a bit for win/loss 
-            #and the values are the number of games won/lost with that number of copies of [card] in the deck.
-            indices=valdf.index.difference({(0,0),(0,1)})
-            card_counts={i[0] for i in indices}
-            for c in card_counts:
-                partialdf.loc[c]=[card_id,arch_id,c,0,0]
-            for (copies, won) in indices:
-                partialdf.loc[copies,['win_count','game_count']]+=[valdf[copies,won]*won,valdf[copies,won]]
-            insertdf=pd.concat([insertdf,partialdf],axis=0)
-        print("Total time:",time.time()-t0)
-        """"if first: 
-            insertdf.to_sql(cg_table_name,conn,if_exists='replace', index=False)
-            first=False
-        else: insertdf.to_sql(cg_table_name,conn,if_exists='append', index=False) """
-        insertdf.to_sql(cg_table_name,conn,if_exists='append', index=False) 
-        conn.commit()
-    conn.commit()
 
 
-def insertColorToCardTables(colorGamesDF:pd.DataFrame,cardDF:pd.DataFrame,arch_id:int,cg_table_name,derived_table_name,conn):
+def insertColorToCardTables(colorGamesDF:pd.DataFrame,cardDF:pd.DataFrame,arch_id:int,cg_table_name,derived_table_name):
     cgInsertDF=pd.DataFrame({'id':[],'arch_id':[],'copies':[],'win_count':[], 'game_count':[]})
     derivedInsertDF=pd.DataFrame({'arch_id':[],'card_id':[],'games_in_hand':[],'wins_in_hand':[], 'avg_win_shares':[],'adjusted_iwd':[],'inclusion_impact':[]})
     gamesInHandDF=gameInHandTotals(colorGamesDF)
@@ -341,19 +275,19 @@ def insertColorToCardTables(colorGamesDF:pd.DataFrame,cardDF:pd.DataFrame,arch_i
     derivedInsertDF.to_sql(derived_table_name,conn,if_exists='append',index=False)
     conn.commit()
     return (gamesInHandDF, winShares, appearances)
-def populateAllColorData(conn): #Find and write all data that is derived from color partitioning GameData
+def populateAllColorData(): #Find and write all data that is derived from color partitioning GameData
     Base.metadata.reflect(bind=conn)
     arch_table=Base.metadata.tables[set_abbr+'Archetypes']
     ag_name=set_abbr+'ArchGameStats'
     arch_start_name=set_abbr+'ArchStartStats'
     totalArchStartsDF=pd.DataFrame({'arch_id':[-1]*8,'num_mulligans':[0,0,1,1,2,2,3,3],'on_play':[False,True]*4,'win_count':[0]*8,'game_count':[0]*8}) #Holds cumulative start data for archetype 'ALL'
     derived_table_name=set_abbr+'CardDerivedStats'
-    derived_table=Base.metadata.tables[derived_table_name]
+    #derived_table=Base.metadata.tables[derived_table_name]
     cg_name=set_abbr+'CardGameStats'
     cardDF=cardInfo(conn=conn,set_abbr=set_abbr)
     cardNameToID={cardDF.loc[idx,'name']:idx for idx in cardDF.index}
     num_decks=0 #used to count how many decks have been added to Decklists for indexing purposes
-    archTableByColorDF=pd.DataFrame({'id':[],'archLabel':[],'num_drafts':[],'num_wins':[],'num_losses':[]})
+    archTableByColorDF=pd.DataFrame({'id':[],'arch_label':[],'num_drafts':[],'num_wins':[],'num_losses':[]})
     for color_id in range(32):
         colors=colorString(color_id)
         print("Getting all stats for",colors)
@@ -364,11 +298,11 @@ def populateAllColorData(conn): #Find and write all data that is derived from co
         num_arch_wins=colorDraftDF['wins'].sum()
         num_arch_losses=colorGamesDF.shape[0]-num_arch_wins
         archTableByColorDF.loc[archTableByColorDF.shape[0]]=(color_id,colors,num_arch_drafts,num_arch_wins,num_arch_losses)
-        insertColorToArchGames(colorGamesDF,cardDF,color_id,ag_name,conn)
-        startRecordDF=insertColorToArchStarts(colorGamesDF,color_id,arch_start_name,conn)
+        insertColorToArchGames(colorGamesDF,cardDF,color_id,ag_name)
+        startRecordDF=insertColorToArchStarts(colorGamesDF,color_id,arch_start_name)
         totalArchStartsDF[['win_count','game_count']]+=startRecordDF[['win_count','game_count']]
         print("Finished",colors,"deck stats")
-        gamesInHandDF, winShares, appearances= insertColorToCardTables(colorGamesDF,cardDF,color_id,cg_name,derived_table_name,conn)
+        gamesInHandDF, winShares, appearances= insertColorToCardTables(colorGamesDF,cardDF,color_id,cg_name,derived_table_name)
         if color_id==0:
             handTotalsDF=gamesInHandDF.copy()
             cumulativeWinShares=winShares.copy()
@@ -382,7 +316,7 @@ def populateAllColorData(conn): #Find and write all data that is derived from co
         num_archetypes=colorGamesDF['label'].max()+1
         print("Categorized into ",num_archetypes, " archetypes")
         if num_archetypes>1:
-            archTableUpdate=pd.DataFrame({'id':[],'archLabel':[],'num_drafts':[],'num_wins':[],'num_losses':[]})
+            archTableUpdate=pd.DataFrame({'id':[],'arch_label':[],'num_drafts':[],'num_wins':[],'num_losses':[]})
             deckTableUpdate=pd.DataFrame({})
             archetypes={}
             for label_number in range(num_archetypes):
@@ -393,10 +327,9 @@ def populateAllColorData(conn): #Find and write all data that is derived from co
                 num_arch_drafts=archDraftDF.shape[0]
                 num_arch_wins=archDraftDF['wins'].sum()
                 num_arch_losses=archGamesDF.shape[0]-num_arch_wins
-                archLabel=colors+str(label_number+1) #WU archetypes go in as 'WU1', 'WU2', etc.
-                archTableUpdate.loc[archTableUpdate.shape[0]]=(arch_id,archLabel,num_arch_drafts,num_arch_wins,num_arch_losses)
+                arch_label=colors+str(label_number+1) #WU archetypes go in as 'WU1', 'WU2', etc.
+                archTableUpdate.loc[archTableUpdate.shape[0]]=(arch_id,arch_label,num_arch_drafts,num_arch_wins,num_arch_losses)
                 deckSection=makeDecklistSection(draftGameDF=archDraftDF,start_index=num_decks,main_colors=colors,arch_id=arch_id)
-                print(deckSection.head())
                 deckTableUpdate=pd.concat([deckTableUpdate,deckSection],axis=0)
                 num_decks+=archDraftDF.shape[0]
             archTableUpdate.to_sql(name=set_abbr+'Archetypes',con=conn,index=False,if_exists='append')
@@ -405,9 +338,9 @@ def populateAllColorData(conn): #Find and write all data that is derived from co
             for label_number in range(num_archetypes):
                 archGamesDF=archetypes[label_number]
                 arch_id=label_number*32+32+color_id
-                insertColorToArchGames(colorDF=archGamesDF,cardDF=cardDF,color_id=arch_id,ag_name=ag_name,conn=conn)
-                insertColorToArchStarts(archGamesDF,arch_id,arch_start_name,conn)
-                insertColorToCardTables(archGamesDF,cardDF,arch_id,cg_name,derived_table_name,conn)      
+                insertColorToArchGames(colorDF=archGamesDF,cardDF=cardDF,color_id=arch_id,ag_name=ag_name)
+                insertColorToArchStarts(archGamesDF,arch_id,arch_start_name)
+                insertColorToCardTables(archGamesDF,cardDF,arch_id,cg_name,derived_table_name)      
             print("Finished archetype stats")
         else:
             deckTableUpdate=makeDecklistSection(draftGameDF=colorDraftDF,start_index=num_decks,main_colors=colors,arch_id=color_id) 
@@ -420,6 +353,7 @@ def populateAllColorData(conn): #Find and write all data that is derived from co
                 overall_ws_per_appearance[card_name]=0
         else:
             overall_ws_per_appearance[card_name]=cumulativeWinShares[card_name]/cumulativeAppearances[card_name]
+        derived_table=Base.metadata.tables[derived_table_name]
         u=update(derived_table).where(derived_table.c.card_id==cardNameToID[card_name],derived_table.c.arch_id==-1).values(
             games_in_hand=int(handTotalsDF.loc[card_name,'games']),wins_in_hand=int(handTotalsDF.loc[card_name,'wins']),
             avg_win_shares=overall_ws_per_appearance[card_name]
@@ -432,9 +366,9 @@ def populateAllColorData(conn): #Find and write all data that is derived from co
         losses=archTableByColorDF.at[i,'num_losses']
         u=update(arch_table).where(arch_table.c.id==int(i)).values(num_drafts=int(drafts),num_wins=int(wins),num_losses=int(losses))
         conn.execute(u)
-    totalArchStartsDF.to_sql(arch_start_name,con=conn2,index=False,if_exists='append')
+    totalArchStartsDF.to_sql(arch_start_name,con=conn,index=False,if_exists='append')
     conn.commit()
-def populateImpacts(conn):
+def populateImpacts():
     #todo: test reasonable samples, maybe other impacts, do I want to handle >1 separately from =1?
     #still in experimental mode, might actually be a stat function as impacts could go in cardstats table
     #for now, better archetypes first. then check correlation of various card/deck metrics with success metrics (i.e. wins)
@@ -477,56 +411,85 @@ def populateImpacts(conn):
             print(cardName, basicIWD, aIWD, aIWD2, incImpact, iWND)
             index+=1
     return df #temporarily outputs a dataframe rather than building a table
-def tableCensus(conn,prefix=''): #For testing purposes. Go through each table and sample the contents.
+def tableCensus(prefix=''): #For testing purposes. Go through each table and sample the contents.
     md=MetaData()
     md.reflect(bind=conn)
     print(md.tables.keys())
     for table_name in md.tables.keys():
         if table_name.startswith(prefix):
             table=md.tables[table_name]
+            print(table.columns)
+            """table=md.tables[table_name]
             s1=select(table).limit(3)
             df=pd.read_sql_query(s1,conn)
             print("Table: ",table_name)
             print(df)
             s2=select(func.count(1)).select_from(table)
-            print("Size:", conn.execute(s2).fetchall())
-def dropSet(conn):
+            print("Size:", conn.execute(s2).fetchall())"""
+def tableCensus2(prefix=''): #For testing purposes. Go through each table and sample the contents.
+    md=Base.metadata()
+    md.reflect(bind=conn)
+    print(md.tables.keys())
+    for table_name in md.tables.keys():
+        if table_name.startswith(prefix):
+            table=md.tables[table_name]
+            print(table.columns)
+def dropSet(drop_draft=True,drop_cards=True):
+    Base.metadata.clear()
     Base.metadata.reflect(bind=conn)
-    for table_name in Base.metadata.tables.keys():
-        table=Base.metadata.tables[table_name]
-        if table_name.startswith(set_abbr) and table_name[-8:]!='GameData':
-            print("Dropping ",table_name)
-            tbl=Base.metadata.tables[table_name]
-            tbl.drop(bind=conn)
+    table_order=['CardDerivedStats','CardGameStats','ArchStartStats','ArchGameStats','Decklists','Archetypes']
+    if drop_draft:
+        table_order.extend(['DraftInfo','DraftPacks'])
+    if drop_cards:
+        table_order.append('CardInfo')
+    for name in table_order:
+        table_name=set_abbr+name
+        if table_name in Base.metadata.tables.keys():
+            table=Base.metadata.tables[set_abbr+name]
+            print("Dropping ",set_abbr+name)
+            table.drop(bind=conn)
     Base.metadata.clear()
     conn.commit()
-def clearSet(conn):
+def clearSet():
+    Base.metadata.clear()
     Base.metadata.reflect(bind=conn)
     table_order=['CardDerivedStats','CardGameStats','ArchStartStats','ArchGameStats','Decklists','Archetypes']
     for name in table_order:
         table_name=set_abbr+name
-        print("Deleting contents of ",table_name)
-        tbl=Base.metadata.tables[table_name]
-        d=delete(tbl)
-        conn.execute(d)
-        conn.commit()
+        if table_name in Base.metadata.tables.keys():
+            print("Deleting contents of ",table_name)
+            tbl=Base.metadata.tables[table_name]
+            d=delete(tbl)
+            conn.execute(d)
+            conn.commit()
     Base.metadata.clear()
     conn.commit()
 
-
-def buildDBSimul(conn):
+def buildDBSimul():
     Base.metadata.reflect(bind=conn) 
     Base.metadata.create_all(bind=conn)
-    populateArchetypes(conn)
+    populateArchetypes()
     print("Built Archetype Table")
-    populateCardTable(conn)
+    populateCardTable()
     print("Built Card Info Table")
     makeDraftInfo(conn,set_abbr=set_abbr) ##<
     processPacks(conn,set_abbr=set_abbr)  ##<These both iterate through draft data and could be merged
-    createDecklists(conn)
-    populateAllColorData(conn)
+    createDecklists()
+    populateAllColorData()
     print("Done")
     conn.commit()
+    conn.close()
+def refreshGameData():
+    #For sets that already exist, keep CardInfo and draftInfo. Replace all stats based on GameData.
+    clearSet()
+    Base.metadata.reflect(bind=conn) 
+    Base.metadata.create_all(bind=conn)
+    populateArchetypes()
+    print("Built Archetype Table")
+    createDecklists()
+    populateAllColorData()
+    print("Done")
+    conn.commit()
+    conn.close()
 
-clearSet(conn2)
-buildDBSimul(conn2)
+refreshGameData()

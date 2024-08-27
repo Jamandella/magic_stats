@@ -7,9 +7,6 @@ from sqlalchemy.orm import sessionmaker
 from cardinfopatch import manualCardInfo
 
 
-#BRO bonus sheet causes an issue
-
-
 def get_parsed(url):
     req = requests.get(url)
     stuff = req.text
@@ -54,47 +51,43 @@ def getTypes(card_type):
     #returns list of first letters of card types (['A','C'])
     #Split cards and DFCs are union of each sides' types.
     type_names=['Enchantment','Artifact','Creature','Land','Battle','Planeswalker','Instant','Sorcery']
-    typeWords=card_type.split()
-    typeLetters=""
-    for t in typeWords:
+    type_words=card_type.split()
+    type_letters=""
+    for t in type_words:
         if t in type_names:
-            typeLetters+=t[0]
-    return typeLetters
-def getCardNames(setName='ltr'):
+            type_letters+=t[0]
+    return type_letters
+def getCardNames(set_abbr):
     engine = create_engine("sqlite:///23spells.db", echo=False) 
     conn = engine.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine)
-    game_data_table=metadata.tables[setName+'GameData']
+    game_data_table=metadata.tables[set_abbr+'GameData']
     cols=game_data_table.c.keys()
-    cardNames=[]
+    card_names=[]
     for c in cols:
         if c[:5]=="deck_":
-            cardNames.append(c[5:])
+            card_names.append(c[5:])
     conn.close()
-    return cardNames
+    return card_names
 
 def scrape_scryfall(set_abbr, maxID=400):
     names=getCardNames(set_abbr)
-    cardInfo=scrape_page(set_abbr,names,maxID=maxID)
-    return cardInfo
-def scrape_page(set_abbr,names,maxID=400):
+    card_info=scrape_page(set_abbr,names,maxID=maxID)
+    return card_info
+def scrape_page(set_abbr,names,maxID=400)->dict:
     soup = get_parsed("https://scryfall.com/sets/"+set_abbr+"?as=checklist")
     table_start=soup.find("tbody")
     cards = table_start.findAll("tr")
-    cardInfo={}
-    rowNum=0
-    allNames=names.copy()
+    card_info={}
+    row_num=0
+    all_names=names.copy()
     unmatched={}
-    while rowNum<min(len(cards),maxID):
-        card=cards[rowNum]
+    card_index=0
+    while row_num<min(len(cards),maxID):
+        card=cards[row_num]
         fields = card.findAll("td")
-        setNum_field=str(fields[1].text.strip())
-        setNum=""
-        for i in range(len(setNum_field)):
-            if setNum_field[i].isnumeric():
-                setNum+=setNum_field[i]
-        setNum=int(setNum)
+        #Because of list cards, set number may not be unique within a set, only useful for ballparking boundary between real set and commander cards
         title = html.unescape(fields[2].text.strip())
         cost = fields[3].text.strip()
         card_type = fields[4].text.strip()
@@ -104,24 +97,26 @@ def scrape_page(set_abbr,names,maxID=400):
         if 'L' in types: mv=-1 #Separating lands out from 0 drops by setting their mana value as -1
         if title in names:
             names.remove(title)
-            cardInfo[setNum]={
+            card_info[card_index]={
                 "name": title,
                 "mv": mv,
                 "color": color, #stored as 5 bit int with each bit representing presence of a color
                 "type": types,
                 "rarity": rarity
                 }
-        elif title not in allNames and setNum<=len(allNames):
-            unmatched[setNum]={
+            card_index+=1
+        elif title not in all_names:
+            unmatched[card_index]={
                 "name": title,
                 "mv": mv,
                 "color": color, #stored as 5 bit int with each bit representing presence of a color
                 "type": types,
                 "rarity": rarity
                 }
+            card_index+=1
             if set_abbr!='plst':
-                print("Card #", setNum, ":", title," has no initial match")
-        rowNum+=1
+                print("Card", title," has no initial match")
+        row_num+=1
     if set_abbr!='plst': 
         #If there are cards on the scryfall page that didn't get matched to card names from 17lands, 
         #check for ways in which the name might have been written differently
@@ -135,16 +130,16 @@ def scrape_page(set_abbr,names,maxID=400):
                 if len(unmatched_name)>len(name):
                     if unmatched_name[:len(name)]==name:
                         print("Secondary match found: ",name," = ",unmatched_name)
-                        cardInfo[n]=unmatched[n]
-                        cardInfo[n]['name']=name
+                        card_info[n]=unmatched[n]
+                        card_info[n]['name']=name
                         names.remove(name)
                         unmatched.pop(n)   
                 else:
                     if name[:len(unmatched_name)]==unmatched_name:
                         if unmatched_name[:len(name)]==name:
                             print("Secondary match found: ",name," = ",unmatched_name)
-                            cardInfo[n]=unmatched[n]
-                            cardInfo[n]['name']=name
+                            card_info[n]=unmatched[n]
+                            card_info[n]['name']=name
                             names.remove(name)
                             unmatched.pop(n)      
         leftovers={}
@@ -164,42 +159,41 @@ def scrape_page(set_abbr,names,maxID=400):
                     alphaname+=nameU[i]
             if alphaname in leftovers.keys():
                 print("Secondary match found: ",leftovers[alphaname]," = ",unmatched[n]['name'])
-                cardInfo[n]=unmatched[n]
-                cardInfo[n]['name']=leftovers[alphaname]
+                card_info[n]=unmatched[n]
+                card_info[n]['name']=leftovers[alphaname]
                 names.remove(leftovers[alphaname])
                 leftovers.pop(alphaname)    
         if len(names)>0:
             bonus_sheets={'bro':'brr','woe':'wot'}
             list_sets={'mkm'}
             if set_abbr in bonus_sheets.keys():
-                max_id=max(cardInfo.keys())
+                max_id=max(card_info.keys())
                 print("Adding bonus sheet cards to set")
                 bonusInfo=scrape_page(bonus_sheets[set_abbr],names)
-                #print(len(bonusInfo.keys()))
-                #print(max_id)
                 id_increment=1
                 for key in bonusInfo.keys():
-                    cardInfo[max_id+id_increment]=bonusInfo[key]
+                    card_info[max_id+id_increment]=bonusInfo[key]
                     id_increment+=1
             if set_abbr in list_sets:
                 print("Adding list cards to set")
-                max_id=max(cardInfo.keys())
+                max_id=max(card_info.keys())
                 listInfo=scrape_page('plst',names,maxID=10000)
                 id_increment=1
                 for key in listInfo.keys():
-                    cardInfo[max_id+id_increment]=listInfo[key]
+                    card_info[max_id+id_increment]=listInfo[key]
                     id_increment+=1
-        if len(names)>0:
-            max_id=max(cardInfo.keys())
-            manualInfo=manualCardInfo(set_abbr=set_abbr)
+        manual_info=manualCardInfo(set_abbr=set_abbr)
+        if len(manual_info)>0:
+            print("Adding in special case cards")
+            max_id=max(card_info.keys())
             id_increment=1
-            for key in manualInfo.keys():
-                cardInfo[max_id+id_increment]=manualInfo[key]
-                names.remove(manualInfo[key]['name'])
-                id_increment+=1
-            if len(names)>0: print("Warning! No match found for the following cards:", *names)
-        
-    return cardInfo
+            for key in manual_info.keys():
+                if manual_info[key]['name'] in names:
+                    card_info[max_id+id_increment]=manual_info[key]
+                    names.remove(manual_info[key]['name'])
+                    id_increment+=1
+        if len(names)>0: print("Warning! No match found for the following cards:", *names)
+    return card_info
 def displaySet(set_abbr,maxID=400):
     print(
         json.dumps(
@@ -207,3 +201,4 @@ def displaySet(set_abbr,maxID=400):
             indent=4,
         )
     )
+
