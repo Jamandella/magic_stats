@@ -83,8 +83,8 @@ def Get_MTGsets():
     MTGsets = cursor.fetchall() #set them equal to a local variable
     MTGsets_json = json.dumps(MTGsets)
     conn.close()
-#    return MTGsets_json
-    return {"response":MTGsets} #return the json
+    return MTGsets_json
+    # return {"response":MTGsets} #return the json
 
 
 @flask_app.route('/getArchRecords/<archLabel>, <set_abbr>', methods = ['GET'])

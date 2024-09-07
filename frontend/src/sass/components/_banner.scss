@@ -1,0 +1,16 @@
+@use "../abstracts" as *;
+
+.banner {
+  background-size: cover;
+  background-position:center;
+  padding-block: 10rem;
+  position: relative;
+
+  &__overlay {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    padding-block: $fluid-size-xs;
+    background: rgba(clr("neutral", "100"), 0.8);
+  }
+}
