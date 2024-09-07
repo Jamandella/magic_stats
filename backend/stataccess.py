@@ -2,7 +2,8 @@
 
 import pandas as pd
 from sqlalchemy import MetaData, select, create_engine, func
-from dbpgstrings import host, database, user, password 
+import backend.dbpgstrings
+host, database, user, password = backend.dbpgstrings.getDBStrings()
 engine=create_engine(url="postgresql://{0}:{1}@{2}:{3}/{4}".format(
     user, password, host, 5432, database))  
 
