@@ -3,9 +3,16 @@ import numpy as np
 from sqlalchemy import MetaData, select, create_engine, func
 from sqlalchemy.orm import sessionmaker
 from math import sqrt
-from dbpgstrings import host, database, user, password 
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+dotenv_path=Path('.\dblogin.env')
+load_dotenv(dotenv_path=dotenv_path)
+host=os.getenv('host')
+database=os.getenv('database')
+user=os.getenv('user')
+password = os.getenv('password')
 port='5432'
-
 
 engine_loc = create_engine("sqlite:///23spells.db", echo=False) #Local db. Contains GameData table for getGameDataFrame.
 #Use first line to read stats from online db. Switch to second to run all locally
@@ -85,48 +92,37 @@ def cardInfo(conn, set_abbr='ltr'):
 
 def listOfColors(order='binary'):
     if order=='binary':
-        return ['W','U','WU','B','WB','UB','WUB','R','WR','UR','WUR','BR','WBR','UBR','WUBR','G',
+        return ['C','W','U','WU','B','WB','UB','WUB','R','WR','UR','WUR','BR','WBR','UBR','WUBR','G',
           'WG','UG','WUG','BG','WBG','UBG','WUBG','RG','WRG','URG','WURG','BRG','WBRG','UBRG','WUBRG']
-    else: return ['W','U','B','R','G','WU','WB','WR','WG','UB','UR','UG','BR','BG','RG','WUB','WUR','WUG','WBR','WBG','WRG',
+    else: return ['C','W','U','B','R','G','WU','WB','WR','WG','UB','UR','UG','BR','BG','RG','WUB','WUR','WUG','WBR','WBG','WRG',
           'UBR','UBG','URG','BRG','WUBR','WUBG','WURG','WBRG','UBRG','WUBRG']
     
-
-def colorString(color:int):
+def colorString(color_int:int):
     #Color in card info is stored as a 5 bit int where each bit is the presence of a color. 
     #This function turns that int into the corresponding WUBRG string.
-    if color==0:
-        return 'C'
-    else:
-        s=""
-        if color%2==1: s+='W'
-        if (color//2)%2==1: s+='U'
-        if (color//4)%2==1: s+='B'    
-        if (color//8)%2==1: s+='R'
-        if (color//16)%2==1: s+='G'
-        return s
-def colorInt(colorString):
+    color_string=listOfColors()[color_int%32]
+    return color_string
+def colorInt(color_string:str):
     #Inverse of colorString on appropriate WUBRG strings. Requires letters be written in WUBRG order.
     #Returns 0 on any string that doesn't start with a WUBRG letter (including 'C')
     #Extracts color info from strings that start with colors (e.g. colorInt('UR2')=10=colorInt('UR'))
-    color_int=0
-    if colorString=="" or type(colorString)!=str:
-        return 0
-    if colorString.startswith('W'):
-        color_int=1
-        colorString=colorString[1:]
-    if colorString.startswith('U'):
-        color_int+=2
-        colorString=colorString[1:]
-    if colorString.startswith('B'):
-        color_int+=4
-        colorString=colorString[1:]
-    if colorString.startswith('R'):
-        color_int+=8
-        colorString=colorString[1:]
-    if colorString.startswith('G'):
-        color_int+=16
+    if color_string[-1].isnumeric(): color_string=color_string[:-1]
+    color_int=listOfColors().index(color_string)
     return color_int
-    #If speed is an issue, could just make the 32 case match statement
+def archIDtoLabel(id:int)->str:
+    if id==-1: return 'ALL'
+    arch_label=colorString(id)
+    if id>32:
+        sub_index=str(id//32)
+        arch_label=arch_label+sub_index
+    return arch_label
+def archLabelToID(label:str)->int:
+    if label=='ALL': return -1
+    id=colorInt(label)
+    if label[-1].isnumeric():
+        sub_index=int(label[-1])
+        id+=sub_index*32
+    return id       
 
 def rankToNum(name:str):
     match name:
@@ -189,7 +185,7 @@ def getCardsWithColor(conn, color, set_abbr='ltr',include_multicolor=True, inclu
 
 def getGameDataFrame(main_colors, set_abbr='ltr'): 
     #returns the data gamedata rows of all games fitting the given criteria as a dataframe
-    #trade off of using too much memory vs reading the raw data too many times which is slow
+    #slow to read from the from the game data table. (takes 10-50s typically) 
     conn = engine_loc.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine_loc)
@@ -199,7 +195,17 @@ def getGameDataFrame(main_colors, set_abbr='ltr'):
     conn.close()
     return df
 
-
+def getGamesByID(draft_ids: list, set_abbr='ltr')->pd.DataFrame:
+    #given a list of draft_id values, get all games from those drafts. 
+    #Can be used to get archetype specific stats after clustering
+    conn = engine_loc.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine_loc)
+    game_data_table=metadata.tables[set_abbr+'GameData']
+    q=select(game_data_table).where(game_data_table.c.draft_id.in_(draft_ids))
+    df=pd.read_sql_query(q,conn)
+    conn.close()
+    return df
 
 def countCurve(gamesdf,carddf):
     #given a dataframe of games, returns total number of cards of each MV in those games
@@ -427,7 +433,7 @@ def cardsInHand(gameDF: pd.DataFrame):
     for key in gameDF.keys():
          if key[:5]=='drawn': 
             card_name=key[6:]
-            hand_info[card_name]=gameDF[key]+gameDF['opening_hand_'+card_name] #+gameDF['tutored_'+card_name] ltrGameData doesn't have tutored currently
+            hand_info[card_name]=gameDF[key]+gameDF['opening_hand_'+card_name] #+gameDF['tutored_'+card_name] #ltrGameData doesn't have tutored currently
     handDF=pd.DataFrame(hand_info)
     return handDF
 
@@ -467,6 +473,7 @@ def winSharesByColors(main_colors, set_abbr='ltr'):
         if significant: print(key,':',ws_per_appearance[key])
 def winSharesOverall(set_abbr='ltr',chunk_size=50000):
     #Find win share stats for all games played.
+    #Defunct. Win shares don't appear to be a valuable stat.
     conn = engine_loc.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine_loc)
@@ -497,16 +504,23 @@ def winSharesOverall(set_abbr='ltr',chunk_size=50000):
         significant=hand_totals[key]>100
         if significant: print(key,':',ws_per_appearance[key])
 
-def gameInHandTotals(gameDF:pd.DataFrame):
+def gameInHandTotals(gameDF:pd.DataFrame,scale_by_copies=True):
     #gameDF should be a game dataframe
     #returns total number of games in which each card shows up and how many of those are wins
+    #Should a game with multiple copies of a card drawn count as multiple games in hand? Leaning yes.
     handDF=cardsInHand(gameDF)
     card_names=handDF.keys()
-    boolHandDF=handDF.gt(0)
-    boolHandDF['won']=gameDF['won']
-    games=(boolHandDF.iloc[:,:-1]).sum(axis=0) #number of games in hand for each card
-    boolHandDF=boolHandDF[boolHandDF['won']==1] #filtering to only look at wins
-    wins=(boolHandDF.iloc[:,:-1]).sum(axis=0) #number of wins where each card appeared
+    if scale_by_copies:
+        handDF['won']=gameDF['won']
+        games=(handDF.iloc[:,:-1]).sum(axis=0) #number of games in hand for each card
+        handDF=handDF[handDF['won']==1] #filtering to only look at wins
+        wins=(handDF.iloc[:,:-1]).sum(axis=0) #number of wins where each card appeared
+    else:
+        boolHandDF=handDF.gt(0)
+        boolHandDF['won']=gameDF['won']
+        games=(boolHandDF.iloc[:,:-1]).sum(axis=0) #number of games in hand for each card
+        boolHandDF=boolHandDF[boolHandDF['won']==1] #filtering to only look at wins
+        wins=(boolHandDF.iloc[:,:-1]).sum(axis=0) #number of wins where each card appeared
     totals=pd.DataFrame({'games':games.to_list(),'wins':wins.to_list()},index=card_names)
     return totals
 
@@ -538,6 +552,13 @@ def gameInHandByColors(main_colors, set_abbr='ltr')->pd.DataFrame:
     totals=gameInHandTotals(gameDF)
     return totals
 
+def findDeckColumns(gameDF: pd.DataFrame):
+    #Given a game dataframe, return a list of all columns that contain deck list info.
+    deck_cols=[]
+    for col in gameDF.keys():
+        if col[:5]=='deck_':
+            deck_cols.append(col)
+    return deck_cols
 def gameStartCounts(gameDF: pd.DataFrame):
     #gameDF should be a game dataframe containing the num_mulligans, on_play, and won columns from GameData
     #Returns a dataframe of records for each pairing of num_mulligans and on_play values
@@ -565,3 +586,17 @@ def gameStartCounts(gameDF: pd.DataFrame):
                     games3+=counts[m,p,1]
         recordDF.loc[recordDF.shape[0]]=[3,bool(p),wins3,games3]
     return recordDF
+def organizeGameInfoByDraft(gamesDF:pd.DataFrame, include_decklists=True):
+    if include_decklists:
+        deck_cols=findDeckColumns(gamesDF)
+        partialInfoDF=gamesDF[['draft_id','draft_time','rank',*deck_cols]].drop_duplicates(subset='draft_id',keep='last')
+    else:    
+        partialInfoDF=gamesDF[['draft_id','draft_time','rank']].drop_duplicates(subset='draft_id') #get 1 row of time and rank data per draft
+    partialInfoDF.index=partialInfoDF['draft_id']
+    wins=gamesDF[['draft_id','won']].groupby('draft_id').sum()  
+    games=gamesDF['draft_id'].value_counts()
+    partialInfoDF['rank']=partialInfoDF['rank'].apply(lambda x: rankToNum(x))
+    draftInfoDF=pd.concat([partialInfoDF,wins,games],axis=1)
+    new_column_names=list(partialInfoDF.columns[:3])+[c[5:] for c in partialInfoDF.columns[3:]] #remove 'deck_' from the deck column names
+    draftInfoDF.columns=[*new_column_names,'wins','games']
+    return draftInfoDF
