@@ -10,12 +10,10 @@ from dotenv import load_dotenv
 from clustermaking import *
 load_dotenv()
 db_url=os.getenv("DB_URL")
-set_abbr='one' #This determines which set we are working with. Current options: ltr, dmu, bro, mkm, one
+set_abbr='fake' #This determines which set we are working with. Current options: ltr, dmu, bro, mkm, one
 port='5432'
 engine=create_engine(url=db_url) 
 conn=engine.connect()
-#metadata = MetaData()
-
 # Table Definitions
 class Base(DeclarativeBase):
     pass
@@ -52,13 +50,13 @@ class CardInfo(Base):
     # card type-A(rtifact), C(reature), E(nchantment), L(and), P(laneswalker), I(nstant), S(orcery), B(attle) 
     # multi-type cards are stored like 'AC' for 'Artifact Creature'.
     # Rarity- C(ommon), U(ncommon), R(are), M(ythic), B(asic land)
-class DraftInfo(Base):
+"""class DraftInfo(Base): #Defunct. (Almost) all data is duplicated in decklists
     __tablename__=set_abbr+'DraftInfo'
     draft_id=mapped_column(String, primary_key=True)
     draft_time=mapped_column(DateTime)
     rank=mapped_column(SmallInteger)
     wins=mapped_column(SmallInteger)
-    losses=mapped_column(SmallInteger)
+    losses=mapped_column(SmallInteger)"""
 
 
 """class Decklists(Base): #The exact structure of this table varies between sets so it is constructed separately
@@ -157,6 +155,8 @@ class ArchStartStats(Base):
 
 #Table Building
 def createDecklists(): 
+    #This is actually the only table that's working properly. The others pretend to have the right data types and constraints,
+    #but get saved
     tableName=set_abbr+'Decklists'
     Base.metadata.reflect(bind=conn)
     if tableName in Base.metadata.tables.keys():
@@ -168,15 +168,14 @@ def createDecklists():
         Base.metadata.reflect(bind=conn)
     carddf=cardInfo(conn=conn,set_abbr=set_abbr)
     cols=[Column('deck_id',Integer, primary_key=True),
-          Column('draft_id',String, ForeignKey(set_abbr+'DraftInfo.draft_id', ondelete='CASCADE')),
-          #Column('draft_id',String),
+          Column('draft_id',String),
           Column('draft_time', DateTime),
           Column('rank', SmallInteger),
           Column('wins',SmallInteger),
           Column('games',SmallInteger),
           Column('main_colors',String),
-          #Column('arch_id', SmallInteger)] #ForeignKey causes an error I can't explain and is a negligible optimization
-          Column('arch_id', SmallInteger, ForeignKey(set_abbr+'Archetypes.id'))]
+          Column('arch_id', SmallInteger)] #ForeignKey causes an error I can't explain and is a negligible optimization
+          #Column('arch_id', SmallInteger, ForeignKey(set_abbr+'Archetypes.id'))]
     for name in carddf['name'].tolist():
         cols.append(Column(name,SmallInteger))
     decktable=Table(set_abbr+'Decklists', Base.metadata, *cols)
@@ -418,22 +417,30 @@ def tableCensus(prefix=''): #For testing purposes. Go through each table and sam
     for table_name in md.tables.keys():
         if table_name.startswith(prefix):
             table=md.tables[table_name]
-            print(table.columns)
-            """table=md.tables[table_name]
+            table=md.tables[table_name]
             s1=select(table).limit(3)
             df=pd.read_sql_query(s1,conn)
             print("Table: ",table_name)
             print(df)
             s2=select(func.count(1)).select_from(table)
-            print("Size:", conn.execute(s2).fetchall())"""
-def tableCensus2(prefix=''): #For testing purposes. Go through each table and sample the contents.
-    md=Base.metadata()
+            print("Size:", conn.execute(s2).fetchall())
+def showConstraints1(prefix=''): #For testing purposes. Go through each table and sample the contents.
+    md=MetaData()
     md.reflect(bind=conn)
     print(md.tables.keys())
     for table_name in md.tables.keys():
         if table_name.startswith(prefix):
             table=md.tables[table_name]
-            print(table.columns)
+            print(table_name)
+            print(table.constraints)
+def showConstraints2(prefix=''): #For testing purposes. Go through each table and sample the contents.
+    Base.metadata.reflect(bind=conn)
+    print(Base.metadata.tables.keys())
+    for table_name in Base.metadata.tables.keys():
+        if table_name.startswith(prefix):
+            print(table_name)
+            table=Base.metadata.tables[table_name]
+            print(table.constraints)
 def dropSet(drop_draft=True,drop_cards=True):
     Base.metadata.clear()
     Base.metadata.reflect(bind=conn)
@@ -472,8 +479,8 @@ def buildDBSimul():
     print("Built Archetype Table")
     populateCardTable()
     print("Built Card Info Table")
-    makeDraftInfo(conn,set_abbr=set_abbr) ##<
-    processPacks(conn,set_abbr=set_abbr)  ##<These both iterate through draft data and could be merged
+    #makeDraftInfo(conn,set_abbr=set_abbr) 
+    processPacks(conn,set_abbr=set_abbr)
     createDecklists()
     populateAllColorData()
     print("Done")
@@ -492,4 +499,11 @@ def refreshGameData():
     conn.commit()
     conn.close()
 
-refreshGameData()
+
+
+#DMU has tables with proper features in Base.metadata and no features in Metadata.
+#ONE and LTR have both Base.metadata and Metadata completely featureless. (no data constraints showing and no data types.)
+    #Both have no actual data in due to crashing during building.
+#BRO has both with proper features.
+#MKM has both with proper features too, but it's decklist table doesn't show constraints for all of the card columns like BRO does, 
+    #despite decklists being loaded in.
