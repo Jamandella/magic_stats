@@ -2,7 +2,7 @@
 
 import pandas as pd
 from sqlalchemy import MetaData, select, create_engine, func
-from statfunctions import colorInt,archLabelToID, archIDtoLabel
+from backend.statfunctions import colorInt,archLabelToID, archIDtoLabel
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -10,6 +10,7 @@ db_url=os.getenv("DB_URL")
 engine=create_engine(url=db_url)  
 def cardInfo(set_abbr:str,as_json=True):
     #Returns the full card info table for the given set. Defaults to returning a pandas dataframe, with an option for json instead.
+    set_abbr=set_abbr.lower()
     conn = engine.connect()
     metadata = MetaData()
     metadata.reflect(bind=engine)
@@ -27,6 +28,8 @@ def getCardsWithColor(set_abbr:str,color:str,include_multicolor=True, include_la
     #Color is determined (in setinfo.py) by mana cost. Could be misleading on some cards like DFCs, adventures, alternate costs, etc.
     #If include_multicolor, get all cards containing that color. Otherwise get cards that are exactly that color.
     #Lands are all marked as colorless. If color='C' and include_lands=True, lands will be included with the colorless cards.
+    set_abbr=set_abbr.lower()
+    color=color.upper()
     carddf=cardInfo(set_abbr,as_json=False)
     colors=['W','U','R','B','G','C']
     set_abbr=set_abbr.lower()
