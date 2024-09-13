@@ -87,7 +87,7 @@ def Get_MTGsets():
     # return {"response":MTGsets} #return the json
 
 
-@flask_app.route('/getArchRecords/<archLabel>, <set_abbr>', methods = ['GET'])
+@flask_app.route('/getArchRecords/<archLabel>/<set_abbr>', methods = ['GET'])
 @cross_origin()
 def ArchRecords(archLabel:str, set_abbr:str):
     http_code[0] = backend.unit_test.str_check(archLabel)#unit test string
