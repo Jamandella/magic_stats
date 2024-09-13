@@ -54,7 +54,8 @@ def getCardsWithColor(set_abbr:str,color:str,include_multicolor=True, include_la
         cards=(carddf.loc[colorfilter])['name'].tolist()
     else:
         cards=carddf.loc[colorfilter].index.to_list()
-    return cards
+    resp={'response':cards}
+    return resp
 
 def getArchAvgCurve(set_abbr:str, arch_label:str):
     #returns mean values of lands and each n drop for given archetype
