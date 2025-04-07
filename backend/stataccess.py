@@ -6,7 +6,7 @@ from backend.statfunctions import colorInt,archLabelToID, archIDtoLabel
 import os
 from dotenv import load_dotenv
 load_dotenv()
-db_url=os.getenv("DB_URL")
+db_url=os.getenv("DATABASE_URL")
 engine=create_engine(url=db_url)  
 def cardInfo(set_abbr:str,as_json=True):
     #Returns the full card info table for the given set. Defaults to returning a pandas dataframe, with an option for json instead.
@@ -38,7 +38,7 @@ def getCardsWithColor(set_abbr:str,color:str,include_multicolor=True, include_la
         c=colors.index(color)
     else:
         print("WARNING: Invalid color requested")
-        return
+        return {'response':[]}
     if c==5: #colorless case
        colorfilter=carddf['color']==0
        if not include_lands:
@@ -92,7 +92,7 @@ def getArchRecord(set_abbr:str, arch_label:str):
     df['win_rate']=df['num_wins']/df['num_games']
     result=pd.Series(data=df.loc[0])
     return result.to_json()
-def getCardInDeckWinRates(set_abbr:str,arch_label='ALL', minCopies=1, maxCopies=40,index_by_name=False,as_json=True): 
+def getCardInDeckWinRates(set_abbr:str,arch_label='ALL', min_copies=1, max_copies=40,index_by_name=False,as_json=True): 
 #Returns game played win rates for all cards, indexed by their numerical id from CardInfo table. Can be restricted to specific decks.
 #Can also require a specific range of copies of each card.
     set_abbr=set_abbr.lower()
@@ -107,15 +107,15 @@ def getCardInDeckWinRates(set_abbr:str,arch_label='ALL', minCopies=1, maxCopies=
         q=select(card_table.c.name,func.sum(cg_table.c.win_count).label("wins"),
                  func.sum(cg_table.c.game_count).label("games_played")).join(
                     card_table, cg_table.c.id==card_table.c.id).where(
-                     cg_table.c.copies>=minCopies,
-                     cg_table.c.copies<=maxCopies).group_by(card_table.c.name)
+                     cg_table.c.copies>=min_copies,
+                     cg_table.c.copies<=max_copies).group_by(card_table.c.name)
         if arch_label!='ALL':
             q=q.where(cg_table.c.arch_id==arch_id)
         df=pd.read_sql(q,conn,index_col='name')
     else:
         q=select(cg_table.c.id,func.sum(cg_table.c.win_count).label("wins"),func.sum(cg_table.c.game_count).label("games_played")).where(
-                                                                            cg_table.c.copies>=minCopies,
-                                                                            cg_table.c.copies<=maxCopies).group_by(cg_table.c.id)
+                                                                            cg_table.c.copies>=min_copies,
+                                                                            cg_table.c.copies<=max_copies).group_by(cg_table.c.id)
         if arch_label!='ALL':
             q=q.where(cg_table.c.arch_id==arch_id)
         df=pd.read_sql_query(q,conn,index_col='id')
@@ -141,11 +141,11 @@ def getRecordByLength(set_abbr:str, arch_label:str,):
     q1=select(arch_stats_table.c.turns,arch_stats_table.c.won,func.sum(arch_stats_table.c.game_count).label('games')).group_by(
         arch_stats_table.c.turns,arch_stats_table.c.won).where(arch_stats_table.c.arch_id==arch_id
     ).order_by(arch_stats_table.c.turns,arch_stats_table.c.won)   
-    resDF=pd.read_sql_query(q1,conn) 
+    res_df=pd.read_sql_query(q1,conn) 
     conn.close()
-    outputDF=pd.DataFrame({'turns':[],'wins':[],'games':[]})
-    outputDF.set_index('turns',inplace=True)
-    df2=resDF.set_index(['turns','won'],inplace=False)
+    output_df=pd.DataFrame({'turns':[],'wins':[],'games':[]})
+    output_df.set_index('turns',inplace=True)
+    df2=res_df.set_index(['turns','won'],inplace=False)
     games_min=0 
     wins_min=0
     for num_turns in range(1,MINTURNS+1): #Grouping together all games that last 5 or less turns
@@ -154,7 +154,7 @@ def getRecordByLength(set_abbr:str, arch_label:str,):
             games_min+=df2.at[(num_turns,True),'games']
         if (num_turns, False) in df2.index:
             games_min+=df2.at[(num_turns,False),'games']
-    outputDF.loc[MINTURNS]=[wins_min,games_min]
+    output_df.loc[MINTURNS]=[wins_min,games_min]
     for num_turns in range(MINTURNS+1,MAXTURNS):
         games=0
         wins=0
@@ -163,24 +163,24 @@ def getRecordByLength(set_abbr:str, arch_label:str,):
             games+=wins
         if (num_turns, False) in df2.index:
             games+=df2.at[(num_turns,False),'games']
-        outputDF.loc[num_turns]=[wins,games]   
+        output_df.loc[num_turns]=[wins,games]   
     games_max=0
     wins_max=0 
-    for num_turns in range(MAXTURNS, resDF['turns'].max()+1):
+    for num_turns in range(MAXTURNS, res_df['turns'].max()+1):
         if (num_turns, True) in df2.index:
             wins_max+=df2.at[(num_turns,True),'games']
             games_max+=df2.at[(num_turns,True),'games']
         if (num_turns, False) in df2.index:
             games_max+=df2.at[(num_turns,False),'games']
-    outputDF.loc[MAXTURNS]=[wins_max,games_max]
-    tempgames=outputDF['games'].mask(outputDF['games']==0,1) #replaces 0 with 1 to avoid dividing by 0
-    outputDF['win_rate']=outputDF['wins']/tempgames
-    total_games=outputDF['games'].sum()
-    outputDF['game_length_rate']=outputDF['games']/total_games
+    output_df.loc[MAXTURNS]=[wins_max,games_max]
+    tempgames=output_df['games'].mask(output_df['games']==0,1) #replaces 0 with 1 to avoid dividing by 0
+    output_df['win_rate']=output_df['wins']/tempgames
+    total_games=output_df['games'].sum()
+    output_df['game_length_rate']=output_df['games']/total_games
     #outputDF['significant_sample']=outputDF['games']>500
-    return outputDF.to_json()
+    return output_df.to_json()
 
-def getMetaDistribution(set_abbr:str, minRank=0,maxRank=6):
+def getMetaDistribution(set_abbr:str, min_rank=0,max_rank=6):
     #Gets number of drafts for each set of main colors. Can be filtered by rank to show the metagame at user's level.
     set_abbr=set_abbr.lower()
     conn = engine.connect()
@@ -189,9 +189,9 @@ def getMetaDistribution(set_abbr:str, minRank=0,maxRank=6):
     #draft_table=metadata.tables[set_abbr+"DraftInfo"]
     deck_table=metadata.tables[set_abbr+"Decklists"]
     s=select(deck_table.c.main_colors,func.count(1).label('drafts')).group_by(deck_table.c.main_colors)
-    if minRank!=0 or maxRank!=6: 
+    if min_rank!=0 or max_rank!=6: 
         rank_names=[None,'bronze','silver','gold','platinum','diamond','mythic']
-        valid_ranks=rank_names[minRank:maxRank+1]
+        valid_ranks=rank_names[min_rank:max_rank+1]
         s=s.where(
         deck_table.c.rank.in_(valid_ranks))
     df=pd.read_sql_query(s,conn)
@@ -387,3 +387,67 @@ def getArchetypeLabels(set_abbr:str,main_colors='ALL'):
     resultDF=pd.read_sql_query(s,conn,index_col='id')
     conn.close()
     return resultDF.to_json()
+
+def getArchetypeAvgMV(set_abbr:str,arch_label:str,include_lands=False):
+    #Returns the average mana value of decks in a given archetype. Option to include lands in the calculation.
+    #This might not be a very good stat to use, but it's here if we want it.
+    set_abbr=set_abbr.lower()
+    arch_label=arch_label.upper()
+    conn = engine.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine)    
+    arch_stats_table=metadata.tables[set_abbr+'ArchGameStats']
+    #Query all rows of the ArchGameStats table corresponding to given deck
+    arch_id=archLabelToID(arch_label)
+    q=select(arch_stats_table).where(arch_stats_table.c.arch_id==arch_id)
+    df=pd.read_sql_query(q,conn) 
+    #Remove first 3 columns from that table, leaving only game count and number of cards per mana value. Add up all the columns.
+    dfTotal=df.iloc[0:,3:].sum() 
+    conn.close()
+    if dfTotal['game_count']!=0: #Avoiding divide by 0.
+        n=dfTotal['game_count']
+        avgs=dfTotal.iloc[1:]/n
+        index_mv=pd.Series([0,0,1,2,3,4,5,6,7,8],index=avgs.index)
+        if include_lands:mean=(avgs*index_mv).sum()/avgs.sum()
+        else: mean=(avgs[1:]*index_mv[1:]).sum()/avgs[1:].sum()
+        return mean
+    else: #Should be all 0's in this case.
+        return dfTotal.iloc[1:].to_json()
+    
+def getArchAvgSpeed(set_abbr:str, arch_label:str,):
+    #Returns average speed for a given archetype. Speed is defined as the difference between average win and loss length.
+    #Also includes average win/loss/game length and number of games for the purpose of sample size cutoffs
+    set_abbr=set_abbr.lower()
+    arch_label=arch_label.upper()
+    conn = engine.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine)
+    arch_stats_table=metadata.tables[set_abbr+'ArchGameStats']
+    arch_id=archLabelToID(arch_label)
+    q1=select(arch_stats_table.c.turns,arch_stats_table.c.won,func.sum(arch_stats_table.c.game_count).label('games')).group_by(
+        arch_stats_table.c.turns,arch_stats_table.c.won).where(arch_stats_table.c.arch_id==arch_id
+    ).order_by(arch_stats_table.c.turns,arch_stats_table.c.won)   
+    res_df=pd.read_sql_query(q1,conn) 
+    conn.close()
+    if res_df.shape[0]==0: return {'average_win_length':0,'average_loss_length':0,'average_game_length':0,'wins':0,'losses':0,'games':0}
+    record_df=pd.DataFrame({'wins':[],'losses':[],'games':[]})
+    df2=res_df.set_index(['turns','won'],inplace=False)
+    for num_turns in range(0,res_df['turns'].max()+1):
+        games=0
+        wins=0
+        if (num_turns, True) in df2.index:
+            wins=df2.at[(num_turns,True),'games']
+            games+=wins
+        if (num_turns, False) in df2.index:
+            games+=df2.at[(num_turns,False),'games']
+        losses=games-wins
+        record_df.loc[num_turns]=[wins,losses,games]   
+    output={}
+    output['average_win_length']=(record_df['wins']*record_df.index).sum()/(max(record_df['wins'].sum(),1))
+    output['average_loss_length']=(record_df['losses']*record_df.index).sum()/(max(record_df['losses'].sum(),1))
+    output['average_game_length']=(record_df['games']*record_df.index).sum()/(max(record_df['games'].sum(),1))
+    output['wins']=record_df['wins'].sum()
+    output['losses']=record_df['losses'].sum()
+    output['games']=record_df['games'].sum()
+    output['speed']=output['average_loss_length']-output['average_win_length']
+    return output
