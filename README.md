@@ -113,16 +113,12 @@ The frontend is a React application built using Vite, a frontend build tool. It 
 - **Technology Stack:**
   - React: The core framework for building the user interface.
   - Vite: The build tool that enhances the development experience.
-  - Recharts: Utilized for data visualization to create informative charts and graphs.
 
-- **Styling:**
-  - SCSS: Styles are composed using SCSS (Sass), providing a more maintainable and modular structure.
-  - Partials: Styles are organized into partials for better readability and maintainability.
 
-- **Functionality:**
-  - UI Components: Overview of key user interface elements.
-  - Views/Pages: Description of different views or pages and their functionalities.
-  - Client-Side Logic: Explanation of any logic or processing executed on the client side.
+- **Styling & UI Components:**
+  - Tailwind CSS: A low-level, utility-first CSS framework that provides design primitives for creating custom, responsive user interfaces without opinionated styles.
+  - Shadcn UI: A collection of accessible, customizable UI components built with Radix and Tailwind CSS.
+
 
 ### Backend
 
