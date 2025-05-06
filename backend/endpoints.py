@@ -48,10 +48,10 @@ def CardInfo(set_abbr:str):
         return json_card
 
 
-@flask_app.route('/getCardsWithColor/<color>/<set_abbr>/<include_multicolor>/<include_lands>/<as_string>', methods = ['GET'])
+@flask_app.route('/getCardsWithColor/<set_abbr>/<color>/<include_multicolor>/<include_lands>/<as_string>', methods = ['GET'])
 @cross_origin()
 def CardsWithColor(color:str, set_abbr:str, include_multicolor:bool, include_lands:bool, as_string:bool):
-    json_card = backend.stataccess.getCardsWithColor(color, set_abbr, include_multicolor, include_lands_as_string)
+    json_card = backend.stataccess.getCardsWithColor(set_abbr, color, include_multicolor, include_lands_as_string)
     http_code[0] = backend.unit_test.str_check(color)#unit test string
     http_code[1] = backend.unit_test.str_check(set_abbr)#unit test string
     http_code[2] = backend.unit_test.bool_check(include_multicolor)#unit test bool
@@ -63,15 +63,15 @@ def CardsWithColor(color:str, set_abbr:str, include_multicolor:bool, include_lan
     return json_card
 
 
-@flask_app.route('/getArchAvgCurve/<archLabel>/<set_abbr>', methods = ['GET'])
+@flask_app.route('/getArchAvgCurve/<set_abbr>/<archLabel>/', methods = ['GET'])
 @cross_origin()
-def ArchAvgCurve(archLabel:str, set_abbr:str):
+def ArchAvgCurve(set_abbr:str, archLabel:str):
     http_code[0] = backend.unit_test.str_check(archLabel)#unit test string
     http_code[1] = backend.unit_test.str_check(set_abbr)#unit test string
     for j in range (2):
         if(http_code[j] != 200):
             return http_code[j]#if a unit test fails return the http code
-    json_card = backend.stataccess.getArchAvgCurve(archLabel, set_abbr)
+    json_card = backend.stataccess.getArchAvgCurve(set_abbr, archLabel)
     return json_card
 
 
@@ -87,21 +87,21 @@ def Get_MTGsets():
     # return {"response":MTGsets} #return the json
 
 
-@flask_app.route('/getArchRecords/<archLabel>/<set_abbr>', methods = ['GET'])
+@flask_app.route('/getArchRecords/<set_abbr>/<archLabel>/', methods = ['GET'])
 @cross_origin()
-def ArchRecords(archLabel:str, set_abbr:str):
+def ArchRecords(sset_abbr:str, archLabel:str):
     http_code[0] = backend.unit_test.str_check(archLabel)#unit test string
     http_code[1] = backend.unit_test.str_check(set_abbr)#unit test string
     for k in range(2):
         if(http_code[k] != 200):
             return http_code[k]#if a unit test fails return the http code
-    json_card = backend.stataccess.getArchRecords(archLabel, set_abbr)
+    json_card = backend.stataccess.getArchRecords(set_abbr, archLabel)
     return json_card
 
 
-@flask_app.route('/getCardInDeckWinRates/<archLabels>/<minCopies>/<maxCopies>/<set_abbr>/<index_by_name>/<as_json>', methods = ['GET'])
+@flask_app.route('/getCardInDeckWinRates/<set_abbr>/<archLabels>/<minCopies>/<maxCopies>/<index_by_name>/<as_json>', methods = ['GET'])
 @cross_origin()
-def CardInDeckWinRates(archLabels:str, minCopies:int, maxCopies:int, set_abbr:str, index_by_name:str, as_json:bool) -> dict:
+def CardInDeckWinRates(set_abbr:str, archLabels:str, minCopies:int, maxCopies:int, index_by_name:str, as_json:bool) -> dict:
     http_code[0] = backend.unit_test.str_check(archLabels)#unit test string
     http_code[1] = backend.unit_test.int_check(minCopies)#unit test integer
     http_code[2] = backend.unit_test.int_check(maxCopies)#unit test integer
@@ -111,7 +111,7 @@ def CardInDeckWinRates(archLabels:str, minCopies:int, maxCopies:int, set_abbr:st
     for l in range(6):
         if(http_code[l] != 200):
             return http_code[l]#if a unit test fails return the http code
-    json_card = getCardInDeckWinRates(archLabels, minCopies, maxCopies, set_abbr, index_by_name, as_json)
+    json_card = getCardInDeckWinRates(set_abbr, archLabels, minCopies, maxCopies, index_by_name, as_json)
     return json_card
 
 
