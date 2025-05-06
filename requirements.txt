@@ -3,4 +3,4 @@ Flask-Cors==3.0.10
 gunicorn==21.1.0
 psycopg2-binary==2.9.9
 werkzeug==2.3.7
-sqlalchemy==2.0.30
+sqlalchemy==2.0.40
