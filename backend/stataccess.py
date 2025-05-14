@@ -451,3 +451,25 @@ def getArchAvgSpeed(set_abbr:str, arch_label:str,):
     output['games']=record_df['games'].sum()
     output['speed']=output['average_loss_length']-output['average_win_length']
     return output
+
+def getActiveSets():
+    #Returns a list of all sets that are currently active in the database.
+    #Includes the set abbreviation, full title, release date, and time of last update.
+    conn = engine.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine)
+    sets_table=metadata.tables['ActiveSets']
+    output=pd.read_sql_table(sets_table.name,conn).to_json()
+    conn.close()
+    return output
+
+def getMostRecentSet():
+    #Returns the abbreviation and name for the most recent set in the database by release date.
+    conn = engine.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine)
+    sets_table=metadata.tables['ActiveSets']
+    s=select(sets_table.c.set_abbr,sets_table.c.set_name).order_by(sets_table.c.set_release_date.desc()).limit(1)
+    output=pd.read_sql_query(s,conn).to_json()
+    conn.close()
+    return output
