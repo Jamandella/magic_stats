@@ -111,9 +111,8 @@ For frontend development, you should only need to run the development server usi
 The frontend is a React application built using Vite, a frontend build tool. It features:
 
 - **Technology Stack:**
-  - React: The core framework for building the user interface.
   - Vite: The build tool that enhances the development experience.
-
+  - React: The core framework for building the user interface.
 
 - **Styling & UI Components:**
   - Tailwind CSS: A low-level, utility-first CSS framework that provides design primitives for creating custom, responsive user interfaces without opinionated styles.
