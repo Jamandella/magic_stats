@@ -1,7 +1,13 @@
+import Layout from "@/components/layout/Layout"
+
 function App() {
   return (
     <>
-      <h1>23 Spells</h1>
+      <Layout>
+        <div className="p-2 pt-0">
+          <h1>23 Spells</h1>
+        </div>
+      </Layout>
     </>
   )
 }
