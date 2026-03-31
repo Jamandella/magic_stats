@@ -192,7 +192,6 @@ def createDecklists():
           Column('wins',SmallInteger),
           Column('games',SmallInteger),
           Column('main_colors',String),
-          #Column('arch_id', SmallInteger)] #ForeignKey causes an error I can't explain and is a negligible optimization
           Column('arch_id', SmallInteger, ForeignKey(set_abbr+'Archetypes.id'))]
     for name in carddf['name'].tolist():
         cols.append(Column(name,SmallInteger))
@@ -349,7 +348,8 @@ def populateAllColorData(): #Find and write all data that is derived from color 
         print("Finished",colors,"deck stats")
         derived_table_section= insertArchToCardTables(colorGamesDF,cardDF,color_id,cg_name,derived_table_name)
         print("Finished",colors,"card stats")
-        num_archetypes=colorGamesDF['label'].max()+1
+        label_values=colorGamesDF['label'].unique().tolist()
+        num_archetypes=colorGamesDF['label'].nunique()
         print("Categorized into ",num_archetypes, " archetypes")
         if num_archetypes==1:
             cumulative_derived_table=combinePartialDerivedStats(cumulative_derived_table,derived_table_section)  
@@ -366,15 +366,22 @@ def populateAllColorData(): #Find and write all data that is derived from color 
             archTableUpdate=pd.DataFrame({'id':[],'arch_label':[],'num_drafts':[],'num_wins':[],'num_losses':[]})
             deckTableUpdate=pd.DataFrame({})
             archetypes={}
-            for label_number in range(num_archetypes):
+            archetype_count=0
+            for label_number in label_values:
                 archGamesDF=colorGamesDF[colorGamesDF['label']==label_number]
-                archetypes[label_number]=archGamesDF
-                arch_id=label_number*32+32+color_id
+                if label_number==-1: 
+                    arch_id=320+color_id 
+                    arch_label=colors+'9' #uncategorized decks get stored as 'WU9' or similar
+                    archetypes[9]=archGamesDF
+                else:   
+                    archetype_count+=1
+                    arch_id=archetype_count*32+color_id
+                    arch_label=colors+str(archetype_count) #WU archetypes go in as 'WU1', 'WU2', etc.
+                    archetypes[archetype_count]=archGamesDF
                 archDraftDF=organizeGameInfoByDraft(archGamesDF)
                 num_arch_drafts=archDraftDF.shape[0]
                 num_arch_wins=archDraftDF['wins'].sum()
                 num_arch_losses=archGamesDF.shape[0]-num_arch_wins
-                arch_label=colors+str(label_number+1) #WU archetypes go in as 'WU1', 'WU2', etc.
                 archTableUpdate.loc[archTableUpdate.shape[0]]=(arch_id,arch_label,num_arch_drafts,num_arch_wins,num_arch_losses)
                 deckSection=makeDecklistSection(draftGameDF=archDraftDF,start_index=num_decks,main_colors=colors,arch_id=arch_id)
                 deckTableUpdate=pd.concat([deckTableUpdate,deckSection],axis=0)
@@ -382,9 +389,9 @@ def populateAllColorData(): #Find and write all data that is derived from color 
             archTableUpdate.to_sql(name=set_abbr+'Archetypes',con=conn,index=False,if_exists='append')
             deckTableUpdate.to_sql(name=set_abbr+'Decklists',con=conn,index=False,if_exists='append')
             conn.commit()
-            for label_number in range(num_archetypes):
-                archGamesDF=archetypes[label_number]
-                arch_id=label_number*32+32+color_id
+            for arch_number in archetypes.keys():
+                archGamesDF=archetypes[arch_number]
+                arch_id=arch_number*32+color_id
                 insertArchToArchGames(archGamesDF,cardDF=cardDF,color_id=arch_id,ag_name=ag_name)
                 insertArchToArchStarts(archGamesDF,arch_id,arch_start_name)
                 arch_derived_table_section=insertArchToCardTables(archGamesDF,cardDF,arch_id,cg_name,derived_table_name)
@@ -501,6 +508,7 @@ def refreshGameData():
     print("Built Archetype Table")
     createDecklists()
     populateAllColorData()
+    updateActiveSets()
     print("Done")
     conn.commit()
     conn.close()
@@ -524,4 +532,3 @@ def updateActiveSets():
         u=update(active_sets).where(active_sets.c.set_abbr==set_abbr).values(set_name=set_name_dict[set_abbr],last_updated=pd.Timestamp.now())
         conn.execute(u)
     conn.commit()
-
