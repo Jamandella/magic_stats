@@ -191,7 +191,7 @@ Once your contribution has been reviewed and meets the project standards, it wil
 - [Lucid Chart](https://lucid.app/lucidchart/002d3ba4-b5e1-44b8-9c6c-3b6e62869340/edit?invitationId=inv_d3a938cc-a15e-49bf-8d0a-d7902a952bda&page=0_0#)
 - [17 Lands](https://www.17lands.com/)
 - [Recharts](https://recharts.org/en-US/)
-- [Trello Workspace](https://trello.com/b/UPAoSil2/magic-stats-are-magical)
+- [Trello Workspace](https://trello.com/b/z2cY9T70/magic-project-tracker)
 
 ## License
 
