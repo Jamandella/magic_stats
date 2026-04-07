@@ -576,3 +576,36 @@ def findNeutralHandStats(games_df:pd.DataFrame):
     neutral_gnihwr=p_win_and_not_drawn/(p_win_and_not_drawn+p_loss_and_not_drawn)
     neutral_iwd=neutral_gihwr-neutral_gnihwr
     return {'neutral_gihwr':neutral_gihwr,'neutral_gnihwr':neutral_gnihwr,'neutral_iwd':neutral_iwd}
+
+def meanDecklist(conn,set_abbr:str, arch_label:str, min_wins=0, max_wins=7, min_rank=0, max_rank=6):
+    #Get's average decklist for all decks of a given set in specified colors or archetype. Can be filtered by rank and record.
+    #(Infrastructure exists to filter by date drafted too if we want)
+    #arch_label can be colors as a WUBRG string, getting all decks with those main colors, e.g. "WB" 
+    #or colors plus a number, e.g.' "WB2", getting a subarchetype of those colors
+    set_abbr=set_abbr.lower()
+    arch_label=arch_label.upper()
+    metadata = MetaData()
+    metadata.reflect(bind=conn)    
+    deck_table=metadata.tables[set_abbr+'Decklists']
+    card_table=metadata.tables[set_abbr+'CardInfo']
+    s0=select(card_table.c.name)
+    cardSeries=pd.read_sql_query(s0,conn)
+    select_args=[func.count(1).label('num_decks')]
+    for card_name in cardSeries['name']:
+        select_args.append(func.avg(getattr(deck_table.c,card_name)).label(card_name))
+    s=select(*select_args)
+    if min_wins>0:
+        s=s.where(deck_table.c.wins>=min_wins)
+    if max_wins<7:
+        s=s.where(deck_table.c.wins<=max_wins)
+    if min_rank>0:
+        s=s.where(deck_table.c.rank>=min_rank)
+    if max_rank<6:
+        s=s.where(deck_table.c.rank<=max_rank)
+    if arch_label[-1:].isnumeric():
+        arch_id=archLabelToID(arch_label)
+        s=s.where(deck_table.c.arch_id==arch_id)
+    else:
+        s=s.where(deck_table.c.main_colors==arch_label)
+    resultDF=pd.read_sql_query(s,conn)
+    return resultDF

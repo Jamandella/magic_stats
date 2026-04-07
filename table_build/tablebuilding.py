@@ -370,7 +370,7 @@ def populateAllColorData(): #Find and write all data that is derived from color 
             for label_number in label_values:
                 archGamesDF=colorGamesDF[colorGamesDF['label']==label_number]
                 if label_number==-1: 
-                    arch_id=320+color_id 
+                    arch_id=32*9+color_id 
                     arch_label=colors+'9' #uncategorized decks get stored as 'WU9' or similar
                     archetypes[9]=archGamesDF
                 else:   

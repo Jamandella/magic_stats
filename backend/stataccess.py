@@ -4,7 +4,7 @@
 #TODO: 
 import pandas as pd
 from sqlalchemy import MetaData, select, create_engine, func
-from backend.statfunctions import colorInt,archLabelToID, archIDtoLabel, meanDecklist
+from backend.statfunctions import colorInt,archLabelToID, archIDtoLabel, meanDecklist, cardInfo
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -548,4 +548,59 @@ def getRandomSampleDecklist(set_abbr:str, arch_label:str, min_wins=0, max_wins=7
     resultDF=pd.read_sql_query(s,conn)
     conn.close()
     return resultDF.T.to_json()
-    
+
+def getOverperformingCards(set_abbr:str, arch_label:str, n_top=10,exclude_rares=True,as_json=True):
+    #Returns the top overperforming cards for a given archetype in a set.
+    set_abbr=set_abbr.lower()
+    conn = engine.connect()
+    metadata = MetaData()
+    metadata.reflect(bind=engine)
+    arch_id=archLabelToID(arch_label)
+    is_subarchetype=arch_label[-1:].isnumeric()
+    if is_subarchetype:
+        main_colors=arch_label[:-1].upper()
+    else:
+        main_colors=arch_label.upper()
+    color_id=colorInt(main_colors)
+    derived_stats_table=metadata.tables[set_abbr+'CardDerivedStats']
+    s_arch=select(derived_stats_table.c.card_id,derived_stats_table.c.arch_id,
+             derived_stats_table.c.games_in_hand,derived_stats_table.c.adjusted_iwd).where(
+                 derived_stats_table.c.arch_id==arch_id)
+    arch_derived_stats_df=pd.read_sql_query(s_arch,conn,index_col='card_id')
+    s_color=select(derived_stats_table.c.card_id,derived_stats_table.c.arch_id,
+             derived_stats_table.c.games_in_hand,derived_stats_table.c.adjusted_iwd).where(
+                 derived_stats_table.c.arch_id==color_id)
+    color_derived_stats_df=pd.read_sql_query(s_color,conn,index_col='card_id')
+    s_all=select(derived_stats_table.c.card_id,derived_stats_table.c.arch_id,
+             derived_stats_table.c.games_in_hand,derived_stats_table.c.adjusted_iwd).where(
+                 derived_stats_table.c.arch_id==-1)
+    all_derived_stats_df=pd.read_sql_query(s_all,conn,index_col='card_id')
+    card_df=cardInfo(conn,set_abbr)
+    conn.close()
+    comparison_df=pd.DataFrame({'arch_iwd':arch_derived_stats_df['adjusted_iwd'],
+                                'color_iwd':color_derived_stats_df['adjusted_iwd'],
+                                'overall_iwd':all_derived_stats_df['adjusted_iwd'],
+                                'arch_games_in_hand':arch_derived_stats_df['games_in_hand'],
+                                'color_games_in_hand':color_derived_stats_df['games_in_hand'],
+                                'overall_games_in_hand':all_derived_stats_df['games_in_hand'],
+                                'card_name':card_df['name']})
+    if exclude_rares:
+        rares=card_df[card_df['rarity'].isin(['M','R'])].index
+        comparison_df=comparison_df[~comparison_df.index.isin(rares)]
+    basics=['Plains','Island','Swamp','Mountain','Forest']
+    basic_ids=card_df[card_df['name'].isin(basics)].index
+    comparison_df=comparison_df[~comparison_df.index.isin(basic_ids)]
+    SAMPLE_SIZE_CUTOFF=500
+    comparison_df=comparison_df[comparison_df['arch_games_in_hand']>=SAMPLE_SIZE_CUTOFF]
+    comparison_df=comparison_df[comparison_df['color_games_in_hand']>=SAMPLE_SIZE_CUTOFF*2] 
+    comparison_df=comparison_df[comparison_df['overall_games_in_hand']>=SAMPLE_SIZE_CUTOFF*3]
+    comparison_df['color_delta']=comparison_df['arch_iwd']-comparison_df['color_iwd']
+    comparison_df['overall_delta']=comparison_df['arch_iwd']-comparison_df['overall_iwd']
+    if is_subarchetype:
+        comparison_df.sort_values(by='color_delta',ascending=False,inplace=True)
+    else:
+        comparison_df.sort_values(by='overall_delta',ascending=False,inplace=True)
+    top_overperformers=comparison_df.iloc[:,[0,3,4,5,6,7,8]].head(n_top)
+    if as_json:
+        return top_overperformers.to_json()
+    else: return top_overperformers
