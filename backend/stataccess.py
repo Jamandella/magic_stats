@@ -62,7 +62,7 @@ def getMetaDistribution(set_abbr:str, min_rank=0,max_rank=6):
     df['meta_share']=df['drafts']/total_drafts
     return df.to_json()
 
-def getArchetypeLabels(set_abbr:str,main_colors='ALL'):
+def getArchetypeLabels(set_abbr:str,main_colors='ALL',as_json=True):
     #Returns the archetypes that exist for the given set
     #If WU was split into 3 groups, the list will contain 'WU' and 'WU1', 'WU2', and 'WU3'.
     #If BRG was not divided, the list will contain only 'BRG'
@@ -79,7 +79,8 @@ def getArchetypeLabels(set_abbr:str,main_colors='ALL'):
         s=s.where(arch_table.c.id%32==color_number)
     resultDF=pd.read_sql_query(s,conn,index_col='id')
     conn.close()
-    return resultDF.to_json()
+    if as_json: return resultDF.to_json()
+    else: return resultDF
 
 def getArchAvgCurve(set_abbr:str, arch_label:str):
     #returns mean values of lands and each n drop for given archetype
@@ -130,6 +131,7 @@ def makeCardTable(set_abbr:str, arch_label='ALL', as_json=True):
     conn.close()
     #Compute GPWR and attach to output
     df['GPWR']=df2['wins']/(df2['games_played'].mask(df2['games_played']==0,1))
+    mean_wr=df2['wins'].sum()/(max(1, df2['games_played'].sum()))
     df['games_played']=df2['games_played']
     df['GPWR']=df['GPWR'].mask(df['GPWR'].isna(),0) #Replace NaN with 0
     #Compute average pick and attach to output
@@ -171,10 +173,10 @@ def makeFormatOverviewTable(set_abbr:str, as_json=True):
     s2=select(arch_stats_table.c.arch_id,arch_stats_table.c.turns,arch_stats_table.c.won,arch_stats_table.c.game_count.label('games')).where(arch_stats_table.c.arch_id<32)
     arch_stats_df=pd.read_sql_query(s2,conn) 
     conn.close()
-    df['average_win_length']=[0]*33
-    df['average_loss_length']=[0]*33
-    df['average_game_length']=[0]*33
-    df['aggression']=[0]*33
+    df['average_win_length']=[0.0]*32
+    df['average_loss_length']=[0.0]*32
+    df['average_game_length']=[0.0]*32
+    df['aggression']=[0.0]*32
     for id in range(32):
         label=archIDtoLabel(id)
         temp_df= arch_stats_df[arch_stats_df['arch_id']==id]
@@ -193,11 +195,11 @@ def makeFormatOverviewTable(set_abbr:str, as_json=True):
     df['num_games']=df['num_wins']+df['num_losses']
     df['win_rate']=df['num_wins']/(df['num_wins']+df['num_losses']).mask(df['num_wins']+df['num_losses']==0,1)
     output_df=df[['num_drafts','num_games','win_rate','average_win_length','average_game_length','aggression']]
-    reorder=['ALL','C','W','U','B','R','G','WU','WB','WR','WG','UB','UR','UG','BR','BG','RG',
+    reorder=['ALL','W','U','B','R','G','WU','WB','WR','WG','UB','UR','UG','BR','BG','RG',
              'WUB','WUR','WUG','WBR','WBG','WRG','UBR','UBG','URG','BRG','WUBR','WUBG','WURG','WBRG','UBRG','WUBRG']
     output_df=output_df.loc[reorder]
     if as_json: return output_df.to_json()
-    else: return df
+    else: return output_df
 def getMeanDecklist(set_abbr:str, arch_label:str, min_wins=0, max_wins=7, min_rank=0, max_rank=6,as_json=True):
     #Get's average decklist for all decks of a given set in specified colors or archetype. Can be filtered by rank and record.
     #(Infrastructure exists to filter by date drafted too if we want)
@@ -237,7 +239,7 @@ def getMeanDecklist(set_abbr:str, arch_label:str, min_wins=0, max_wins=7, min_ra
 
 #May be useful later, but not currently used:
 
-def getArchRecord(set_abbr:str, arch_label:str):
+def getArchRecord(set_abbr:str, arch_label:str,as_json=True):
     #returns a a given deck's total wins, losses, drafts, win percentage, and average record per draft. wins/(wins+losses) for deck's overall win rate. 
     #Could be used the page for a single archetype
     set_abbr=set_abbr.lower()
@@ -250,9 +252,10 @@ def getArchRecord(set_abbr:str, arch_label:str):
     df=pd.read_sql_query(q1,conn)
     conn.close()
     df['num_games']=df['num_wins']+df['num_losses']
-    df['win_rate']=df['num_wins']/df['num_games']
+    df['win_rate']=df['num_wins']/df['num_games'].mask(df['num_games']==0,1)
     result=pd.Series(data=df.loc[0])
-    return result.to_json()
+    if as_json: return result.to_json()
+    return result
 def getCardInDeckWinRates(set_abbr:str,arch_label='ALL', min_copies=1, max_copies=40,index_by_name=False,as_json=True): 
 #Returns game played win rates for all cards, indexed by their numerical id from CardInfo table. Can be restricted to specific decks.
 #Can also require a specific range of copies of each card.
